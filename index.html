@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P-Q Capability 3D Viewer Tool</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111c34; --panel2:#16233f; --line:#26365c;
+    --ink:#e8eefb; --muted:#93a4c7; --accent:#38bdf8; --accent2:#22c55e;
+    --green:#22c55e; --greenDk:#15803d; --blue:#3b82f6; --red:#ef4444;
+    --amber:#f59e0b; --purple:#a855f7; --grid:#25324f;
+    --ok:#16a34a; --bad:#dc2626; --chip:#1e2c4d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);
+       font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;
+         background:linear-gradient(90deg,#0b1428,#132244);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  header .sub{color:var(--muted);font-size:12px}
+  header .spacer{flex:1}
+  .banner{padding:8px 18px;font-size:12.5px;background:#3a2a0a;color:#ffd98a;
+          border-bottom:1px solid #5a4413;display:none}
+  .banner.show{display:block}
+  .btn{background:var(--chip);color:var(--ink);border:1px solid var(--line);
+       border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:#0e2a45;border-color:#1d5a86;color:#cfeaff}
+  .wrap{display:grid;grid-template-columns:340px 1fr;gap:0;height:calc(100% - 52px)}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;height:auto}}
+
+  /* LEFT — plant data */
+  aside{background:var(--panel);border-right:1px solid var(--line);
+        overflow:auto;display:flex;flex-direction:column}
+  /* Controls relocated into the left sidebar (U/P sliders, readout, SVG toggle) */
+  .side-controls{padding:12px 12px 4px;border-bottom:1px solid var(--line)}
+  .side-controls .controls{grid-template-columns:1fr;gap:10px;margin-bottom:12px}
+  .side-controls .readout{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .side-controls .svgbar{margin-bottom:12px}
+  .tabs{display:flex;flex-wrap:wrap;gap:4px;padding:10px;border-bottom:1px solid var(--line)}
+  .tabs button{flex:1 1 auto;background:transparent;border:1px solid var(--line);
+     color:var(--muted);border-radius:7px;padding:6px 8px;font-size:11.5px;cursor:pointer}
+  .tabs button.active{background:var(--panel2);color:var(--ink);border-color:var(--accent)}
+  .tabpanes{padding:12px 14px}
+  .tabpane{display:none}.tabpane.active{display:block}
+  .kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:12.5px}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+  .sec-title{font-size:11px;text-transform:uppercase;letter-spacing:.7px;
+             color:var(--accent);margin:14px 0 6px}
+  .note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;
+        border:1px solid var(--line);background:var(--chip)}
+  .on{color:#bbf7d0;border-color:#2f6b45}.off{color:#fca5a5;border-color:#6b2f2f}
+
+  /* RIGHT — diagrams + controls */
+  main{overflow:auto;padding:14px 16px 40px}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px}
+  @media(max-width:1150px){.controls{grid-template-columns:1fr}}
+  .ctl{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .ctl label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}
+  .ctl label b{color:var(--ink);font-size:15px;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;margin:8px 0 2px;accent-color:var(--accent)}
+  .ticks{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+  .snap{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+  .snap button{font-size:10.5px;padding:2px 7px;border-radius:20px;background:var(--chip);
+     border:1px solid var(--line);color:var(--muted);cursor:pointer}
+  .snap button.cur{border-color:var(--accent2);color:#bbf7d0}
+
+  .readout{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  @media(max-width:1150px){.readout{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .stat .lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .stat .num{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px}
+  .stat .u{font-size:12px;color:var(--muted);font-weight:500}
+  .stat.warn{border-color:#7a4a12;background:#241a08}
+  .stat.warn .num{color:#fbbf24}
+
+  .svgbar{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:9px 12px;
+     background:#1b1233;border:1px solid #4a2e7a;border-radius:12px}
+  .switch{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e9d5ff}
+  .switch input{width:16px;height:16px;accent-color:#c084fc}
+  .svginfo{font-size:11.5px;color:#c4b5fd}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:1150px){.charts{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .card h3{margin:2px 0 2px;font-size:13.5px}
+  .card .hint{font-size:11px;color:var(--muted);margin-bottom:6px}
+  canvas{width:100%;height:auto;display:block;background:#0b1326;border-radius:8px}
+
+  .tblcard{margin-top:14px}
+  .tblhead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .tblhead h3{margin:0;font-size:13.5px}.tblhead .spacer{flex:1}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);
+        font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  tr.grp td{background:var(--panel2);color:var(--accent);font-size:11px;
+     text-transform:uppercase;letter-spacing:.5px;text-align:left}
+  .yes{color:#4ade80;font-weight:600}.no{color:#f87171;font-weight:600}
+  .tag{font-size:10.5px;padding:1px 6px;border-radius:20px;border:1px solid var(--line)}
+  .tag.cap{color:#93c5fd;border-color:#2b4d82}.tag.ind{color:#fda4af;border-color:#7a2f3d}
+  .tag.u1{color:#cbd5e1}
+  footer{color:var(--muted);font-size:11px;margin-top:18px;line-height:1.6}
+  code{background:#0b1326;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ P-Q Capability 3D Viewer Tool</h1>
+  <span class="sub" id="projSub">—</span>
+  <span class="spacer"></span>
+  <button class="btn" id="btnLoad">📂 Load results JSON…</button>
+  <input type="file" id="fileIn" accept=".json,application/json" style="display:none">
+</header>
+<div class="banner" id="banner"></div>
+
+<div class="wrap">
+  <!-- ───────── LEFT: plant parameters ───────── -->
+  <aside>
+    <!-- Controls (U/P sliders, live readout, SVG toggle) — moved here from the right main -->
+    <div class="side-controls">
+      <div class="controls">
+        <div class="ctl">
+          <label>Grid voltage&nbsp;U&nbsp;<span class="sub">(measured at test moment)</span>
+                 <b><span id="uVal">1.000</span> p.u.</b></label>
+          <input type="range" id="uSlider" min="0" max="1" step="0.001" value="0.5">
+          <div class="ticks"><span id="uMinT">0.90</span><span id="uMaxT">1.10</span></div>
+          <div class="snap" id="uSnap"></div>
+        </div>
+        <div class="ctl">
+          <label>Active power&nbsp;P&nbsp;<span class="sub">(being injected at GCP)</span>
+                 <b><span id="pVal">0.0</span> MW</b></label>
+          <input type="range" id="pSlider" min="0" max="1" step="0.001" value="1">
+          <div class="ticks"><span>0</span><span id="pMaxT">P_max</span></div>
+          <div class="snap" id="pSnap"></div>
+        </div>
+      </div>
+      <div class="readout" id="readout"></div>
+      <div class="svgbar" id="svgbar" hidden>
+        <label class="switch">
+          <input type="checkbox" id="svgToggle">
+          <span>⊕ Include SVG (Static Var Generator) reactive support</span>
+        </label>
+        <span class="svginfo" id="svgInfo"></span>
+      </div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-t="rating" class="active">Rating</button>
+      <button data-t="grid">Grid / TX</button>
+      <button data-t="reactive">Reactive</button>
+      <button data-t="volt">Voltage</button>
+      <button data-t="about">Data</button>
+    </div>
+    <div class="tabpanes">
+      <div class="tabpane active" id="pane-rating"></div>
+      <div class="tabpane" id="pane-grid"></div>
+      <div class="tabpane" id="pane-reactive"></div>
+      <div class="tabpane" id="pane-volt"></div>
+      <div class="tabpane" id="pane-about"></div>
+    </div>
+  </aside>
+
+  <!-- ───────── RIGHT: diagrams + controls ───────── -->
+  <main>
+    <div class="charts">
+      <div class="card">
+        <h3>P-Q capability at U = <span id="pqU">1.000</span> p.u. <span class="sub">(blue volume slice)</span></h3>
+        <div class="hint">Feasible reactive range at the connection point vs. active power.
+             Vertical line = your injected P; the band shows allowable Q there.</div>
+        <canvas id="pqCanvas" width="560" height="440"></canvas>
+      </div>
+      <div class="card">
+        <h3>U-Q capability envelope <span class="sub">(live at P = <span id="uqPval">—</span> MW; P_max envelope dashed)</span></h3>
+        <div class="hint">Solid green = feasible Q range at your selected P (varies with the P slider);
+             dashed = contractual P_max envelope. Horizontal line = your measured U.</div>
+        <canvas id="uqCanvas" width="560" height="440"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="tblhead" style="margin-bottom:6px">
+        <h3>P-Q-V capability volume <span class="sub">(3-D · feasible P-Q hull stacked per grid-voltage)</span></h3>
+        <span class="spacer"></span>
+        <button class="btn" id="btn3dReset">⟳ Reset view</button>
+      </div>
+      <div class="hint">Browser twin of the engine's 3-D figure: each translucent layer is the feasible reactive region
+           at one grid-voltage level, coloured by voltage (viridis). White ring = your measured-U slice · green bar =
+           allowable Q at your injected P · red = the P_ATR cross-section plane. <b>Drag to rotate, scroll to zoom.</b></div>
+      <canvas id="pqv3dCanvas" width="900" height="560"></canvas>
+    </div>
+
+    <div class="card tblcard">
+      <div class="tblhead">
+        <h3>Recommended P-Q test points</h3>
+        <span class="sub">at U = <span id="tblU">1.000</span> p.u.</span>
+        <span class="spacer"></span>
+        <button class="btn" id="btnCopy">⧉ Copy table</button>
+      </div>
+      <table id="tpTable"><thead></thead><tbody></tbody></table>
+      <div class="note">Q sign convention (matches the diagram &amp; ANRE Fig 7C):
+        <b>negative = inductive</b> (plant absorbs reactive), <b>positive = capacitive</b>
+        (plant injects reactive). ✔ = point lies inside the converged capability at this (U, P).</div>
+    </div>
+
+    <footer id="foot"></footer>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════════
+   P-Q Capability 3D Viewer Tool
+   Reads commissioning_pq_data.json exported by simulation_engine.py
+   (SC-21 green U-Q/Pmax envelope + SC-18 blue P-Q-V volume, OLTC-regulated LF).
+   All capability numbers come from PyPSA load flow; the browser only
+   interpolates / intersects pre-computed convex-hull rings — no physics here.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- SAMPLE DATA (clearly flagged) — lets the tool run before a real
+   JSON is loaded. Shape is identical to the engine export. ---------- */
+const SAMPLE_DATA = (function(){
+  const levels=[0.90,0.925,0.95,1.00,1.05,1.075,1.10];
+  const Pmax=20.21, Smax=20.65;
+  // synthetic feasible P-Q hull per voltage level (approx "D" capability shape)
+  function ring(v){
+    const shift = -1.2 - (v-1.0)*6.0;          // more inductive as U rises
+    const pts=[]; const N=22;
+    for(let i=0;i<=N;i++){                       // upper (capacitive) edge
+      const P=Pmax*i/N;
+      let q = Math.sqrt(Math.max(Smax*Smax-P*P,0));   // inverter circle
+      q = Math.min(q, 6.5) + shift;              // TX/PF cap + voltage shift
+      pts.push([P,q]);
+    }
+    for(let i=N;i>=0;i--){                        // lower (inductive) edge
+      const P=Pmax*i/N;
+      let q = -Math.sqrt(Math.max(Smax*Smax-P*P,0));
+      q = Math.max(q,-6.5) + shift;
+      pts.push([P,q]);
+    }
+    return pts;
+  }
+  const hull_by_level={}, points_by_level={};
+  levels.forEach(v=>{
+    const r=ring(v); hull_by_level[v.toFixed(3)]=r;
+    const pc=[]; for(let k=0;k<r.length;k+=2) pc.push(r[k]); points_by_level[v.toFixed(3)]=pc;
+  });
+  const green=levels.map(v=>{
+    const shift=-1.2-(v-1.0)*3.0;
+    return {U:v, Q_min_MVAr:shift-0.12, Q_max_MVAr:shift+0.10,
+            P_at_qmin_MW:Pmax, P_at_qmax_MW:Pmax,
+            qmin_norm:(shift-0.12)/Pmax, qmax_norm:(shift+0.10)/Pmax,
+            Q_set_qmin_MVAr:shift-0.6, Q_set_qmax_MVAr:shift+0.6};
+  });
+  // SVG (Static Var Generator) — rated ±Q extends the reactive reach
+  const Qsvg=7.5;
+  const svg={active:true, Q_cap_MVAr:Qsvg, Q_ind_MVAr:Qsvg,
+    green_cap:green.map(g=>({U:g.U, Q_max_MVAr:g.Q_max_MVAr+Qsvg-(g.U-1.0)*3, P_at_qmax_MW:Pmax})),
+    green_ind:green.map(g=>({U:g.U, Q_min_MVAr:g.Q_min_MVAr-Qsvg-(g.U-1.0)*3, P_at_qmin_MW:Pmax})),
+    dcap_by_level:{}, dind_by_level:{}};
+  levels.forEach(v=>{svg.dcap_by_level[v.toFixed(3)]=Qsvg-(v-1.0)*3;
+                     svg.dind_by_level[v.toFixed(3)]=Qsvg+(v-1.0)*3;});
+  return {
+    svg,
+    meta:{project:"SAMPLE (demo)", generated:"—", sample:true,
+          note:"Illustrative data — load a real commissioning_pq_data.json."},
+    plant:{pv_on:1,wind_on:0,bess_on:0,S_total_MVA:Smax,P_total_MW:16.52,
+           Q_cap_MVAr:12.39,P_max_PGC_MW:Pmax,wind_MW:0,bess_MW:0,S_wind_MVA:0,
+           S_bess_MVA:0,TX1_MVA:80,TX1_HV_kV:110,TX1_LV_kV:33,inv_PF:0.8,
+           pf_grid_min:0.1,pf_limit:0.9,grid_v_pu:1.0,hv_v_min_pu:0.9,hv_v_max_pu:1.1},
+    plants:[{key:'pv',name:'PV',on:1,S_MVA:Smax,P_MW:16.52,Qcap_MVAr:12.39},
+            {key:'wind',name:'Wind',on:0,S_MVA:0,P_MW:0,Qcap_MVAr:0},
+            {key:'bess',name:'BESS',on:0,S_MVA:0,P_MW:0,Qcap_MVAr:0}],
+    fig7c:{outer_rect:{q_min:-0.50,q_max:0.65,u_min:0.825,u_max:1.10},
+           inner_polygon:[[-0.48,0.925],[-0.50,1.10],[0.0,1.10],[0.30,1.075],
+                          [0.30,0.90],[0.0,0.90],[-0.48,0.925]]},
+    green_envelope:green,
+    pqv_volume:{levels:levels, points_by_level:points_by_level,
+                hull_by_level:hull_by_level, vhv_by_level:{}}
+  };
+})();
+
+let DATA = SAMPLE_DATA;
+
+/* ---------- tolerant load helpers ----------
+   Python json.dump writes bare NaN / Infinity for non-finite floats (invalid JSON);
+   non-converged operating points also leave null Q rows. Parse loosely and drop
+   any non-finite/null entries so the diagrams never receive NaN coordinates. */
+function finite(x){return typeof x==='number'&&isFinite(x);}
+function parseLoose(text){
+  try{return JSON.parse(text);}
+  catch(e){return JSON.parse(String(text).replace(/([:\[,]\s*)(-?Infinity|NaN)/g,'$1null'));}
+}
+function cleanMap(m){const o={};for(const k in (m||{}))if(finite(m[k]))o[k]=m[k];return o;}
+function normalizeData(d){
+  if(Array.isArray(d.green_envelope))
+    d.green_envelope=d.green_envelope.filter(r=>r&&finite(r.Q_min_MVAr)&&finite(r.Q_max_MVAr));
+  if(d.svg){
+    if(Array.isArray(d.svg.green_cap))
+      d.svg.green_cap=d.svg.green_cap.filter(r=>r&&finite(r.Q_max_MVAr));
+    if(Array.isArray(d.svg.green_ind))
+      d.svg.green_ind=d.svg.green_ind.filter(r=>r&&finite(r.Q_min_MVAr));
+    d.svg.dcap_by_level=cleanMap(d.svg.dcap_by_level);
+    d.svg.dind_by_level=cleanMap(d.svg.dind_by_level);
+    const noEdges=!(d.svg.green_cap&&d.svg.green_cap.length)
+                 &&!(d.svg.green_ind&&d.svg.green_ind.length);
+    const noExt=!Object.keys(d.svg.dcap_by_level).length
+               &&!Object.keys(d.svg.dind_by_level).length;
+    if(noEdges&&noExt) d.svg.active=false;
+  }
+  const pv=d.pqv_volume||{};
+  ['points_by_level','hull_by_level'].forEach(k=>{
+    if(pv[k]) for(const key in pv[k])
+      pv[k][key]=(pv[k][key]||[]).filter(pt=>Array.isArray(pt)&&finite(pt[0])&&finite(pt[1]));
+  });
+  return d;
+}
+
+/* ---------- geometry helpers on hull rings ---------- */
+function ringPExtent(ring){
+  let lo=Infinity, hi=-Infinity;
+  for(const [p] of ring){ if(p<lo)lo=p; if(p>hi)hi=p; }
+  return [lo,hi];
+}
+function ringQSpanAtP(ring, P){
+  const ys=[];
+  for(let i=0;i<ring.length;i++){
+    const [x1,y1]=ring[i], [x2,y2]=ring[(i+1)%ring.length];
+    if(x1===x2) continue;
+    if((x1-P)*(x2-P)<=0){                       // edge straddles x=P
+      const t=(P-x1)/(x2-x1); ys.push(y1+t*(y2-y1));
+    }
+  }
+  if(ys.length<2) return null;
+  return [Math.min(...ys), Math.max(...ys)];
+}
+function sortedLevels(){ return DATA.pqv_volume.levels.slice().sort((a,b)=>a-b); }
+function bracket(U){
+  const L=sortedLevels();
+  if(U<=L[0]) return {lo:L[0],hi:L[0],w:0};
+  if(U>=L[L.length-1]) return {lo:L[L.length-1],hi:L[L.length-1],w:0};
+  for(let i=0;i<L.length-1;i++){
+    if(U>=L[i]&&U<=L[i+1]) return {lo:L[i],hi:L[i+1],w:(U-L[i])/(L[i+1]-L[i])};
+  }
+  return {lo:L[0],hi:L[0],w:0};
+}
+function hullOf(v){ return DATA.pqv_volume.hull_by_level[v.toFixed(3)]||DATA.pqv_volume.hull_by_level[String(v)]; }
+/* Q span [qlo,qhi] at (U,P) interpolated between bracketing voltage levels */
+function qSpanAtUP(U,P){
+  const b=bracket(U);
+  const rlo=hullOf(b.lo), rhi=hullOf(b.hi);
+  if(!rlo&&!rhi) return null;
+  // Interpolated nose: the feasible region closes here — beyond it there is no P.
+  const noseLo=rlo?ringPExtent(rlo)[1]:null, noseHi=rhi?ringPExtent(rhi)[1]:null;
+  const noseU=(noseLo!=null&&noseHi!=null)?noseLo+(noseHi-noseLo)*b.w
+             :(noseLo!=null?noseLo:noseHi);
+  if(P>noseU+1e-9) return null;
+  // Clamp each level's P to its OWN nose so a level whose hull ends earlier
+  // pinches at its nose vertex (region tapers smoothly) instead of dropping out.
+  // The drop-out used to make the interpolation jump to the full far-level hull,
+  // producing the low-U spike/tail beyond the nearer level's nose.
+  const slo=(rlo&&noseLo!=null)?ringQSpanAtP(rlo,Math.min(P,noseLo)):null;
+  const shi=(rhi&&noseHi!=null)?ringQSpanAtP(rhi,Math.min(P,noseHi)):null;
+  if(!slo&&!shi) return null;
+  if(!slo) return shi; if(!shi) return slo;
+  return [slo[0]+(shi[0]-slo[0])*b.w, slo[1]+(shi[1]-slo[1])*b.w];
+}
+function pNoseAtU(U){
+  const b=bracket(U);
+  const [,plo]=ringPExtent(hullOf(b.lo)); const [,phi]=ringPExtent(hullOf(b.hi));
+  return plo+(phi-plo)*b.w;
+}
+/* interpolated green envelope Q range + P at a given U */
+function greenAtU(U){
+  const g=DATA.green_envelope.slice().sort((a,b)=>a.U-b.U);
+  if(!g.length) return null;
+  if(U<=g[0].U) return g[0];
+  if(U>=g[g.length-1].U) return g[g.length-1];
+  for(let i=0;i<g.length-1;i++){
+    if(U>=g[i].U&&U<=g[i+1].U){
+      const w=(U-g[i].U)/(g[i+1].U-g[i].U), L=g[i],H=g[i+1];
+      const lp=(a,b)=>a+(b-a)*w;
+      return {U, Q_min_MVAr:lp(L.Q_min_MVAr,H.Q_min_MVAr),
+              Q_max_MVAr:lp(L.Q_max_MVAr,H.Q_max_MVAr),
+              P_at_qmin_MW:lp(L.P_at_qmin_MW,H.P_at_qmin_MW),
+              P_at_qmax_MW:lp(L.P_at_qmax_MW,H.P_at_qmax_MW)};
+    }
+  }
+  return g[0];
+}
+/* power-factor from (P,Q); tag cap/ind */
+function pf(P,Q){
+  const s=Math.hypot(P,Q); if(s<1e-9) return {v:1,tag:'u1',txt:'1.000'};
+  const v=Math.abs(P)/s;
+  return {v, tag:Q>0.02?'cap':(Q<-0.02?'ind':'u1'),
+          txt:v.toFixed(3)+(Q>0.02?' cap':(Q<-0.02?' ind':''))};
+}
+/* contractual power-factor limit (from JSON, default 0.9). Single source of truth. */
+function pfLimit(){return (DATA.plant&&finite(DATA.plant.pf_limit))?DATA.plant.pf_limit:0.9;}
+
+/* ---------- SVG (Static Var Generator) reactive-support helpers ---------- */
+let SVG_ON=false;
+function hasSVG(){return !!(DATA.svg && DATA.svg.active);}
+function interpMap(map,U){
+  const keys=Object.keys(map).map(Number).sort((a,b)=>a-b);
+  if(!keys.length) return 0;
+  if(U<=keys[0]) return map[keys[0].toFixed(3)];
+  if(U>=keys[keys.length-1]) return map[keys[keys.length-1].toFixed(3)];
+  for(let i=0;i<keys.length-1;i++){
+    if(U>=keys[i]&&U<=keys[i+1]){
+      const w=(U-keys[i])/(keys[i+1]-keys[i]);
+      return map[keys[i].toFixed(3)]+(map[keys[i+1].toFixed(3)]-map[keys[i].toFixed(3)])*w;
+    }
+  }
+  return 0;
+}
+/* per-voltage reactive extension {dcap (+), dind (+)} at U */
+function svgExtAtU(U){
+  if(!SVG_ON||!hasSVG()) return {dcap:0,dind:0};
+  return {dcap:interpMap(DATA.svg.dcap_by_level||{},U),
+          dind:interpMap(DATA.svg.dind_by_level||{},U)};
+}
+/* effective Q span at (U,P) including SVG when enabled */
+function qSpanEff(U,P){
+  const s=qSpanAtUP(U,P); if(!s) return null;
+  const e=svgExtAtU(U); return [s[0]-e.dind, s[1]+e.dcap];
+}
+
+/* ═══════════════ CANVAS DRAWING ═══════════════ */
+function fitCanvas(cv){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||560, h=Math.round(w*0.82);
+  cv.width=w*dpr; cv.height=h*dpr; cv.style.height=h+'px';
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+function axes(ctx,w,h,xr,yr,pad,xlab,ylab){
+  const [x0,x1]=xr,[y0,y1]=yr;
+  const X=v=>pad.l+(v-x0)/(x1-x0)*(w-pad.l-pad.r);
+  const Y=v=>h-pad.b-(v-y0)/(y1-y0)*(h-pad.t-pad.b);
+  ctx.strokeStyle='#25324f'; ctx.fillStyle='#7f92b8'; ctx.lineWidth=1;
+  ctx.font='10px system-ui'; ctx.textBaseline='middle';
+  const xt=niceTicks(x0,x1,7), yt=niceTicks(y0,y1,7);
+  ctx.textAlign='center';
+  xt.forEach(t=>{ctx.strokeStyle='#1c2842';ctx.beginPath();ctx.moveTo(X(t),pad.t);
+     ctx.lineTo(X(t),h-pad.b);ctx.stroke();
+     ctx.fillText(fmt(t),X(t),h-pad.b+11);});
+  ctx.textAlign='right';
+  yt.forEach(t=>{ctx.strokeStyle='#1c2842';ctx.beginPath();ctx.moveTo(pad.l,Y(t));
+     ctx.lineTo(w-pad.r,Y(t));ctx.stroke();
+     ctx.fillText(fmt(t),pad.l-6,Y(t));});
+  // frame
+  ctx.strokeStyle='#3a4c72';ctx.strokeRect(pad.l,pad.t,w-pad.l-pad.r,h-pad.t-pad.b);
+  // labels
+  ctx.fillStyle='#aab8d8';ctx.textAlign='center';ctx.font='11px system-ui';
+  ctx.fillText(xlab,pad.l+(w-pad.l-pad.r)/2,h-4);
+  ctx.save();ctx.translate(12,pad.t+(h-pad.t-pad.b)/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(ylab,0,0);ctx.restore();
+  return {X,Y};
+}
+function niceTicks(a,b,n){
+  const span=b-a||1, step0=span/n, mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  const norm=step0/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const out=[]; let t=Math.ceil(a/step)*step;
+  for(;t<=b+1e-9;t+=step) out.push(Math.abs(t)<1e-9?0:t);
+  return out;
+}
+function fmt(t){return Math.abs(t)>=100?t.toFixed(0):Math.abs(t)>=10?t.toFixed(1):t.toFixed(2);}
+
+function drawPQ(U,P){
+  const cv=document.getElementById('pqCanvas'); const {ctx,w,h}=fitCanvas(cv);
+  const Pmax=DATA.plant.P_max_PGC_MW||pNoseAtU(U);
+  const nose=Math.max(pNoseAtU(U),Pmax)*1.05;
+  // y-range from all rings
+  let qlo=Infinity,qhi=-Infinity;
+  sortedLevels().forEach(v=>{const r=hullOf(v);r&&r.forEach(([,q])=>{if(q<qlo)qlo=q;if(q>qhi)qhi=q;});});
+  if(SVG_ON&&hasSVG()){
+    const dc=Math.max(0,...Object.values(DATA.svg.dcap_by_level||{}).map(Number));
+    const di=Math.max(0,...Object.values(DATA.svg.dind_by_level||{}).map(Number));
+    qhi+=dc; qlo-=di;
+  }
+  const pad={l:52,r:14,t:14,b:34};
+  const {X,Y}=axes(ctx,w,h,[0,nose],[Math.floor(qlo-1),Math.ceil(qhi+1)],pad,
+      'P  [MW]  (export →)','Q_GCP  [MVAr]   (ind ← → cap)');
+  // faint hull outlines of every level for context
+  sortedLevels().forEach(v=>{
+    const r=hullOf(v); if(!r)return;
+    ctx.beginPath();r.forEach(([p,q],i)=>{const px=X(p),py=Y(q);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    ctx.closePath();ctx.strokeStyle='rgba(59,130,246,.18)';ctx.lineWidth=1;ctx.stroke();
+  });
+  // interpolated feasible region at exactly U (blue filled)
+  const N=80, up=[],dn=[];
+  for(let i=0;i<=N;i++){const p=nose*i/N; const s=qSpanAtUP(U,p);
+    if(s){up.push([p,s[1]]);dn.push([p,s[0]]);}}
+  if(up.length>1){
+    ctx.beginPath();
+    up.forEach(([p,q],i)=>{const px=X(p),py=Y(q);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    for(let i=dn.length-1;i>=0;i--){ctx.lineTo(X(dn[i][0]),Y(dn[i][1]));}
+    ctx.closePath();
+    ctx.fillStyle='rgba(56,189,248,.18)';ctx.fill();
+    ctx.strokeStyle='#38bdf8';ctx.lineWidth=1.8;ctx.stroke();
+  }
+  // SVG-extended feasible region (magenta) when enabled
+  if(SVG_ON&&hasSVG()){
+    const up2=[],dn2=[];
+    for(let i=0;i<=N;i++){const p=nose*i/N; const s=qSpanEff(U,p);
+      if(s){up2.push([p,s[1]]);dn2.push([p,s[0]]);}}
+    if(up2.length>1){
+      ctx.beginPath();
+      up2.forEach(([p,q],i)=>{const px=X(p),py=Y(q);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+      for(let i=dn2.length-1;i>=0;i--){ctx.lineTo(X(dn2[i][0]),Y(dn2[i][1]));}
+      ctx.closePath();
+      ctx.fillStyle='rgba(192,132,252,.10)';ctx.fill();
+      ctx.strokeStyle='#c084fc';ctx.lineWidth=1.6;ctx.setLineDash([6,4]);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+  // P_max (P_ATR) vertical line
+  if(DATA.plant.P_max_PGC_MW){
+    ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(239,68,68,.8)';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.moveTo(X(Pmax),pad.t);ctx.lineTo(X(Pmax),h-pad.b);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle='#fca5a5';ctx.font='10px system-ui';ctx.textAlign='left';
+    ctx.fillText('P_max '+Pmax.toFixed(2),X(Pmax)+4,pad.t+10);
+  }
+  // contractual-PF lines
+  const tan=Math.tan(Math.acos(pfLimit()));
+  [['+',tan,'#f59e0b'],['-',-tan,'#a855f7']].forEach(([s,k,c])=>{
+    ctx.strokeStyle=c;ctx.setLineDash([2,3]);ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(X(0),Y(0));ctx.lineTo(X(nose),Y(k*nose));ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  // Q=0 line
+  ctx.strokeStyle='rgba(148,163,184,.5)';ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(X(0),Y(0));ctx.lineTo(X(nose),Y(0));ctx.stroke();ctx.setLineDash([]);
+  // cursor: vertical at P + band
+  const span=qSpanAtUP(U,P), spanE=qSpanEff(U,P);
+  ctx.strokeStyle='#e8eefb';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(X(P),pad.t);ctx.lineTo(X(P),h-pad.b);ctx.stroke();
+  if(SVG_ON&&spanE){                              // extended (magenta) band under base
+    ctx.strokeStyle='#c084fc';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(X(P),Y(spanE[0]));ctx.lineTo(X(P),Y(spanE[1]));ctx.stroke();
+    [spanE[0],spanE[1]].forEach(q=>{ctx.fillStyle='#c084fc';ctx.beginPath();
+      ctx.arc(X(P),Y(q),4,0,7);ctx.fill();
+      ctx.fillStyle='#e9d5ff';ctx.font='10px system-ui';ctx.textAlign='left';
+      ctx.fillText(q.toFixed(2),X(P)+7,Y(q));});
+  }
+  if(span){
+    ctx.strokeStyle='#22c55e';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(X(P),Y(span[0]));ctx.lineTo(X(P),Y(span[1]));ctx.stroke();
+    [span[0],span[1]].forEach(q=>{ctx.fillStyle='#22c55e';ctx.beginPath();
+      ctx.arc(X(P),Y(q),4,0,7);ctx.fill();
+      if(!(SVG_ON&&spanE)){ctx.fillStyle='#bbf7d0';ctx.font='10px system-ui';ctx.textAlign='left';
+        ctx.fillText(q.toFixed(2),X(P)+7,Y(q));}});
+  }
+}
+
+function drawUQ(U,P){
+  const cv=document.getElementById('uqCanvas'); const {ctx,w,h}=fitCanvas(cv);
+  const g=DATA.green_envelope.slice().sort((a,b)=>a.U-b.U);
+  const den=DATA.plant.P_max_PGC_MW||1;
+  const rect=DATA.fig7c.outer_rect;
+
+  // Live P-dependent envelope: Q span at the SELECTED P for each voltage level,
+  // sliced from the blue P-Q-V volume (same source as the readout/table).
+  const live=[];
+  sortedLevels().forEach(v=>{ const s=qSpanAtUP(v,P);
+    if(s&&finite(s[0])&&finite(s[1])) live.push({U:v,Q_min_MVAr:s[0],Q_max_MVAr:s[1]}); });
+
+  // x-range from fig7c rect + P_max green pts + live spans (+ SVG reach if shown)
+  let qs=[rect.q_min*den,rect.q_max*den];
+  g.forEach(r=>{qs.push(r.Q_min_MVAr,r.Q_max_MVAr);});
+  live.forEach(r=>{qs.push(r.Q_min_MVAr,r.Q_max_MVAr);});
+  if(SVG_ON&&hasSVG()){
+    (DATA.svg.green_cap||[]).forEach(r=>qs.push(r.Q_max_MVAr));
+    (DATA.svg.green_ind||[]).forEach(r=>qs.push(r.Q_min_MVAr));
+  }
+  const xlim=Math.max(...qs.map(Math.abs))*1.12||1;
+  const pad={l:52,r:14,t:14,b:34};
+  const {X,Y}=axes(ctx,w,h,[-xlim,xlim],[0.80,1.15],pad,
+      'Q_GCP  [MVAr]   (ind ← → cap)','U / u.r   [p.u.]');
+
+  // fig7c outer rect
+  ctx.strokeStyle='#8090b5';ctx.lineWidth=1.6;
+  ctx.strokeRect(X(rect.q_min*den),Y(rect.u_max),
+     X(rect.q_max*den)-X(rect.q_min*den),Y(rect.u_min)-Y(rect.u_max));
+  // fig7c inner polygon (dashed)
+  const poly=DATA.fig7c.inner_polygon;
+  ctx.setLineDash([5,4]);ctx.strokeStyle='#9aa7c7';ctx.lineWidth=1.2;ctx.beginPath();
+  poly.forEach(([q,u],i)=>{const px=X(q*den),py=Y(u);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+  ctx.closePath();ctx.stroke();ctx.setLineDash([]);
+
+  // ── P_max contractual envelope — faint dashed reference ──
+  if(g.length){
+    const qL=g.map(r=>r.Q_min_MVAr),qR=g.map(r=>r.Q_max_MVAr),uv=g.map(r=>r.U);
+    ctx.setLineDash([6,4]);ctx.beginPath();
+    uv.forEach((u,i)=>{const px=X(qL[i]),py=Y(u);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    for(let i=uv.length-1;i>=0;i--){ctx.lineTo(X(qR[i]),Y(uv[i]));}
+    ctx.closePath();ctx.strokeStyle='rgba(34,197,94,.45)';ctx.lineWidth=1.3;ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Live envelope at the selected P — solid green (primary) ──
+  if(live.length){
+    const qL=live.map(r=>r.Q_min_MVAr),qR=live.map(r=>r.Q_max_MVAr),uv=live.map(r=>r.U);
+    ctx.beginPath();
+    uv.forEach((u,i)=>{const px=X(qL[i]),py=Y(u);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+    for(let i=uv.length-1;i>=0;i--){ctx.lineTo(X(qR[i]),Y(uv[i]));}
+    ctx.closePath();ctx.fillStyle='rgba(34,197,94,.12)';ctx.fill();
+    ctx.strokeStyle='#22c55e';ctx.lineWidth=2;ctx.stroke();
+    live.forEach(r=>{[r.Q_min_MVAr,r.Q_max_MVAr].forEach(q=>{
+      ctx.fillStyle='#22c55e';ctx.strokeStyle='#14532d';ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(X(q),Y(r.U),3.5,0,7);ctx.fill();ctx.stroke();});});
+    const c=[live[0].Q_min_MVAr,live[0].Q_max_MVAr,
+             live[live.length-1].Q_min_MVAr,live[live.length-1].Q_max_MVAr];
+    const cu=[live[0].U,live[0].U,live[live.length-1].U,live[live.length-1].U];
+    c.forEach((q,i)=>star(ctx,X(q),Y(cu[i]),7,'#ef4444'));
+  }
+
+  // SVG (Static Var Generator) extended edges — reach @ P_max (labelled)
+  if(SVG_ON&&hasSVG()){
+    const gc=(DATA.svg.green_cap||[]).slice().sort((a,b)=>a.U-b.U);
+    const gi=(DATA.svg.green_ind||[]).slice().sort((a,b)=>a.U-b.U);
+    if(gc.length&&gi.length&&gc.length===gi.length){
+      ctx.beginPath();
+      gi.forEach((r,i)=>{const px=X(r.Q_min_MVAr),py=Y(r.U);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+      for(let i=gc.length-1;i>=0;i--){ctx.lineTo(X(gc[i].Q_max_MVAr),Y(gc[i].U));}
+      ctx.closePath();ctx.fillStyle='rgba(192,132,252,.08)';ctx.fill();
+    }
+    ctx.setLineDash([6,4]);
+    if(gc.length){ctx.strokeStyle='#c084fc';ctx.lineWidth=1.8;ctx.beginPath();
+      gc.forEach((r,i)=>{const px=X(r.Q_max_MVAr),py=Y(r.U);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+      ctx.stroke();gc.forEach(r=>{ctx.fillStyle='#c084fc';ctx.fillRect(X(r.Q_max_MVAr)-2.5,Y(r.U)-2.5,5,5);});}
+    if(gi.length){ctx.strokeStyle='#f59e0b';ctx.lineWidth=1.8;ctx.beginPath();
+      gi.forEach((r,i)=>{const px=X(r.Q_min_MVAr),py=Y(r.U);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});
+      ctx.stroke();gi.forEach(r=>{ctx.fillStyle='#f59e0b';ctx.fillRect(X(r.Q_min_MVAr)-2.5,Y(r.U)-2.5,5,5);});}
+    ctx.setLineDash([]);
+    ctx.fillStyle='#c084fc';ctx.font='10px system-ui';
+    ctx.fillText('SVG reach @ P_max',pad.l+6,pad.t+12);
+  }
+
+  // contractual-PF & Q=0 verticals
+  const tan=Math.tan(Math.acos(pfLimit()));
+  ctx.strokeStyle='rgba(148,163,184,.6)';ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(X(0),pad.t);ctx.lineTo(X(0),h-pad.b);ctx.stroke();
+  ctx.strokeStyle='#f59e0b';ctx.beginPath();ctx.moveTo(X(tan*den),pad.t);ctx.lineTo(X(tan*den),h-pad.b);ctx.stroke();
+  ctx.strokeStyle='#a855f7';ctx.beginPath();ctx.moveTo(X(-tan*den),pad.t);ctx.lineTo(X(-tan*den),h-pad.b);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // cursor: horizontal line at U + bands, with Q(+PF) labels at the U-line
+  // intersections of BOTH the live (solid) and P_max (dashed) green hulls.
+  const span=qSpanAtUP(U,P);
+  const spanE=(SVG_ON&&hasSVG())?qSpanEff(U,P):null;    // magenta SVG-extended band
+  const gu=greenAtU(U);                                 // P_max (dashed) Q range at U
+  ctx.strokeStyle='#e8eefb';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(pad.l,Y(U));ctx.lineTo(w-pad.r,Y(U));ctx.stroke();
+  if(spanE){ctx.strokeStyle='#c084fc';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(X(spanE[0]),Y(U));ctx.lineTo(X(spanE[1]),Y(U));ctx.stroke();}
+  if(span){ctx.strokeStyle='#22c55e';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(X(span[0]),Y(U));ctx.lineTo(X(span[1]),Y(U));ctx.stroke();}
+  // dot + "Q (PF)" label at (q,U); side<0 → left of point, side>0 → right of point
+  ctx.font='10px system-ui';ctx.textBaseline='middle';
+  const qTag=(q,pAt,fill,ring,dy,side,filled)=>{
+    if(!finite(q))return; const px=X(q),py=Y(U);
+    if(filled){ctx.fillStyle=ring;ctx.beginPath();ctx.arc(px,py,3.5,0,7);ctx.fill();}
+    else{ctx.strokeStyle=ring;ctx.lineWidth=1;ctx.beginPath();ctx.arc(px,py,3,0,7);ctx.stroke();}
+    ctx.fillStyle=fill;ctx.textAlign=side<0?'right':'left';
+    ctx.fillText(q.toFixed(2)+' ('+pf(pAt,q).txt+')',px+side*6,py+dy);
+  };
+  // live band (magenta when SVG on, else green) — labels ABOVE the U line
+  const liveBand=spanE||span, liveFill=spanE?'#e9d5ff':'#bbf7d0', liveRing=spanE?'#c084fc':'#22c55e';
+  if(liveBand){qTag(liveBand[0],P,liveFill,liveRing,-8,-1,true);
+               qTag(liveBand[1],P,liveFill,liveRing,-8,1,true);}
+  // P_max (dashed) reference intersections — labels BELOW the U line, faint green
+  if(gu){const pmn=finite(gu.P_at_qmin_MW)?gu.P_at_qmin_MW:den, pmx=finite(gu.P_at_qmax_MW)?gu.P_at_qmax_MW:den;
+    qTag(gu.Q_min_MVAr,pmn,'#86efac','rgba(34,197,94,.7)',11,-1,false);
+    qTag(gu.Q_max_MVAr,pmx,'#86efac','rgba(34,197,94,.7)',11,1,false);}
+  const lbl=document.getElementById('uqPval'); if(lbl) lbl.textContent=P.toFixed(1);
+}
+function star(ctx,x,y,r,c){
+  ctx.fillStyle=c;ctx.strokeStyle='#000';ctx.lineWidth=.8;ctx.beginPath();
+  for(let i=0;i<10;i++){const a=Math.PI/5*i-Math.PI/2;const rr=i%2?r*.45:r;
+    const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr;i?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+  ctx.closePath();ctx.fill();ctx.stroke();
+}
+
+/* ═══════════════ 3-D P-Q-V CAPABILITY VOLUME ═══════════════
+   Self-contained orthographic twin of plot_pqv_capability_volume() in
+   simulation_engine.py: one translucent convex-hull layer per grid-voltage
+   level, stacked on the V axis and coloured by voltage (viridis). No 3-D
+   library — a hand-rolled ortho camera. Drag to orbit, wheel to zoom.
+   Live-linked to the U / P sliders: white ring = the measured-U feasible
+   slice, green bar = the allowable-Q band at the injected P, red = the
+   P_ATR cross-section plane (same source as the 2-D charts above). */
+const V3D={elev:22,azim:-58,scale:1,drag:null};
+const _VIRIDIS=[[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],
+  [31,158,137],[53,183,121],[110,206,88],[181,222,43],[253,231,37]];
+function viridis(t,a){
+  t=Math.max(0,Math.min(1,t)); const x=t*(_VIRIDIS.length-1);
+  const i=Math.min(_VIRIDIS.length-2,Math.floor(x)),f=x-i,A=_VIRIDIS[i],B=_VIRIDIS[i+1];
+  const r=Math.round(A[0]+(B[0]-A[0])*f),g=Math.round(A[1]+(B[1]-A[1])*f),b=Math.round(A[2]+(B[2]-A[2])*f);
+  return a==null?'rgb('+r+','+g+','+b+')':'rgba('+r+','+g+','+b+','+a+')';
+}
+function vBand(){
+  const L=sortedLevels(),lo0=L[0],hi0=L[L.length-1],p=DATA.plant||{};
+  const vlo=Math.min(finite(p.hv_v_min_pu)?p.hv_v_min_pu:lo0,lo0);
+  let vhi=Math.max(finite(p.hv_v_max_pu)?p.hv_v_max_pu:hi0,hi0);
+  if(vhi-vlo<1e-6) vhi=vlo+0.04;
+  return {vlo,vhi};
+}
+function vColorT(v){const b=vBand();
+  if(b.vlo<1.0&&1.0<b.vhi) return v<=1.0?0.5*(v-b.vlo)/(1.0-b.vlo):0.5+0.5*(v-1.0)/(b.vhi-1.0);
+  return (v-b.vlo)/((b.vhi-b.vlo)||1);}
+function fit3D(cv){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||760,h=Math.max(430,Math.round(w*0.60));
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+function draw3D(U,P){
+  const cv=document.getElementById('pqv3dCanvas'); if(!cv) return;
+  const {ctx,w,h}=fit3D(cv);
+  ctx.clearRect(0,0,w,h); ctx.fillStyle='#0b1326'; ctx.fillRect(0,0,w,h);
+  const L=sortedLevels(); if(!L.length) return;
+  let px0=Infinity,px1=-Infinity,qy0=Infinity,qy1=-Infinity;
+  L.forEach(v=>{const r=hullOf(v); if(!r)return;
+    r.forEach(([p,q])=>{if(p<px0)px0=p;if(p>px1)px1=p;if(q<qy0)qy0=q;if(q>qy1)qy1=q;});});
+  if(!isFinite(px0)){ctx.fillStyle='#7f92b8';ctx.font='12px system-ui';ctx.fillText('No P-Q-V volume data.',16,24);return;}
+  const b=vBand(),vlo=b.vlo,vhi=b.vhi;
+  if(px0>0)px0=0;                                        // anchor P axis at the origin
+  const qm=(qy1-qy0)*0.06||1; qy0-=qm; qy1+=qm; px1+=(px1-px0)*0.04||1;
+  const geom={px0,pw:(px1-px0)||1,qy0,qw:(qy1-qy0)||1,vz0:vlo,vw:(vhi-vlo)||1,zasp:0.62};
+  const cx=w*0.46,cy=h*0.56,R=Math.min(w*0.66,h)*0.5*V3D.scale;
+  const az=V3D.azim*Math.PI/180,el=V3D.elev*Math.PI/180;
+  const ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);
+  function proj(P_,Q_,V_){
+    const nx=((P_-geom.px0)/geom.pw-0.5),ny=((Q_-geom.qy0)/geom.qw-0.5),
+          nz=((V_-geom.vz0)/geom.vw-0.5)*geom.zasp;
+    const sx=(-sa)*nx+(ca)*ny;
+    const sy=(-se*ca)*nx+(-se*sa)*ny+(ce)*nz;
+    const dp=(ce*ca)*nx+(ce*sa)*ny+(se)*nz;
+    return [cx+sx*R,cy-sy*R,dp];
+  }
+  // ---- bounding cube wireframe ----
+  const CS=[[px0,qy0,vlo],[px1,qy0,vlo],[px1,qy1,vlo],[px0,qy1,vlo],
+            [px0,qy0,vhi],[px1,qy0,vhi],[px1,qy1,vhi],[px0,qy1,vhi]];
+  const CP=CS.map(c=>proj(c[0],c[1],c[2]));
+  const EDG=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  ctx.strokeStyle='rgba(120,140,180,.28)';ctx.lineWidth=1;
+  EDG.forEach(e=>{ctx.beginPath();ctx.moveTo(CP[e[0]][0],CP[e[0]][1]);ctx.lineTo(CP[e[1]][0],CP[e[1]][1]);ctx.stroke();});
+  // ---- stacked hull layers, painted back -> front ----
+  const layers=L.map(v=>{const r=hullOf(v)||[]; let mx=0,my=0;
+    r.forEach(([p,q])=>{mx+=p;my+=q;}); const c=proj(mx/(r.length||1),my/(r.length||1),v);
+    return {v,r,depth:c[2]};}).sort((a,b)=>a.depth-b.depth);
+  layers.forEach(Lr=>{
+    const r=Lr.r; if(r.length<3) return; const t=vColorT(Lr.v);
+    ctx.beginPath();r.forEach((pt,i)=>{const s=proj(pt[0],pt[1],Lr.v);i?ctx.lineTo(s[0],s[1]):ctx.moveTo(s[0],s[1]);});
+    ctx.closePath();ctx.fillStyle=viridis(t,0.22);ctx.fill();
+    ctx.strokeStyle=viridis(t,0.95);ctx.lineWidth=1.4;ctx.stroke();
+    const pts=(DATA.pqv_volume.points_by_level[Lr.v.toFixed(3)]||DATA.pqv_volume.points_by_level[String(Lr.v)]||[]);
+    ctx.fillStyle=viridis(t,0.55);
+    pts.forEach(pt=>{const s=proj(pt[0],pt[1],Lr.v);ctx.beginPath();ctx.arc(s[0],s[1],1.5,0,6.29);ctx.fill();});
+  });
+  // ---- P_ATR cross-section curtain + dashed base marker ----
+  const PATR=DATA.plant.P_max_PGC_MW;
+  if(finite(PATR)){
+    const lo=[],hi=[];
+    L.forEach(v=>{const sp=ringQSpanAtP(hullOf(v)||[],PATR); if(sp){lo.push([PATR,sp[0],v]);hi.push([PATR,sp[1],v]);}});
+    if(lo.length>=2){
+      ctx.beginPath();
+      lo.forEach((c,i)=>{const s=proj(c[0],c[1],c[2]);i?ctx.lineTo(s[0],s[1]):ctx.moveTo(s[0],s[1]);});
+      for(let i=hi.length-1;i>=0;i--){const s=proj(hi[i][0],hi[i][1],hi[i][2]);ctx.lineTo(s[0],s[1]);}
+      ctx.closePath();ctx.fillStyle='rgba(239,68,68,.15)';ctx.fill();
+      ctx.strokeStyle='rgba(239,68,68,.85)';ctx.lineWidth=1.2;ctx.stroke();
+    }
+    const m0=proj(PATR,qy0,vlo),m1=proj(PATR,qy1,vlo);
+    ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(239,68,68,.8)';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.moveTo(m0[0],m0[1]);ctx.lineTo(m1[0],m1[1]);ctx.stroke();ctx.setLineDash([]);
+    const tl=proj(PATR,qy1,vhi);
+    ctx.fillStyle='#fca5a5';ctx.font='10px system-ui';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    ctx.fillText('P_ATR = '+PATR.toFixed(2)+' MW',tl[0]+4,tl[1]);
+  }
+  // ---- current-U feasible slice (white highlight) ----
+  const nose=pNoseAtU(U),NN=60,upr=[],dnr=[];
+  for(let i=0;i<=NN;i++){const p=nose*i/NN,sp=qSpanAtUP(U,p);if(sp){upr.push([p,sp[1]]);dnr.push([p,sp[0]]);}}
+  if(upr.length>1){
+    ctx.beginPath();
+    upr.forEach((pt,i)=>{const s=proj(pt[0],pt[1],U);i?ctx.lineTo(s[0],s[1]):ctx.moveTo(s[0],s[1]);});
+    for(let i=dnr.length-1;i>=0;i--){const s=proj(dnr[i][0],dnr[i][1],U);ctx.lineTo(s[0],s[1]);}
+    ctx.closePath();ctx.fillStyle='rgba(232,238,251,.10)';ctx.fill();
+    ctx.strokeStyle='#e8eefb';ctx.lineWidth=2;ctx.stroke();
+  }
+  // ---- operating marker: allowable-Q band at (U,P) with Q / P / U readouts ----
+  const sp=qSpanAtUP(U,P);
+  if(sp){
+    function tag(txt,x,y,ta,tb,fg){                       // legible chip label
+      ctx.font='700 10px system-ui';ctx.textAlign=ta;ctx.textBaseline=tb;
+      const tw=ctx.measureText(txt).width,pd=3,hh=14;
+      const rx=ta==='right'?x-tw-pd:ta==='center'?x-tw/2-pd:x-pd;
+      const ry=tb==='bottom'?y-hh:tb==='middle'?y-hh/2:y;
+      ctx.fillStyle='rgba(11,19,38,.72)';ctx.fillRect(rx,ry,tw+2*pd,hh);
+      ctx.fillStyle=fg;ctx.fillText(txt,x,y);
+    }
+    const mid=(sp[0]+sp[1])/2;
+    const a=proj(P,sp[0],U),bb=proj(P,sp[1],U),mc=proj(P,mid,U);
+    const pax=proj(P,qy0,vlo),vax=proj(px0,qy0,U);         // P on floor axis, U on V axis
+    // dashed guides: band -> P-axis and band -> U(V)-axis, with axis dots
+    ctx.setLineDash([4,3]);ctx.strokeStyle='rgba(34,197,94,.6)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(mc[0],mc[1]);ctx.lineTo(pax[0],pax[1]);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mc[0],mc[1]);ctx.lineTo(vax[0],vax[1]);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#22c55e';
+    ctx.beginPath();ctx.arc(pax[0],pax[1],2.6,0,6.29);ctx.fill();
+    ctx.beginPath();ctx.arc(vax[0],vax[1],2.6,0,6.29);ctx.fill();
+    // green feasible-Q band + end dots (green line ∩ red P_ATR panel)
+    ctx.strokeStyle='#22c55e';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(bb[0],bb[1]);ctx.stroke();
+    [a,bb].forEach(s=>{ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(s[0],s[1],4,0,6.29);ctx.fill();});
+    // Q values at both band edges (− inductive / + capacitive)
+    const fq=q=>(q>=0?'+':'')+q.toFixed(1);
+    const lft=a[0]<=bb[0]?{p:a,q:sp[0]}:{p:bb,q:sp[1]};
+    const rgt=a[0]<=bb[0]?{p:bb,q:sp[1]}:{p:a,q:sp[0]};
+    tag(fq(lft.q),lft.p[0]-6,lft.p[1],'right','middle','#bbf7d0');
+    tag(fq(rgt.q),rgt.p[0]+6,rgt.p[1],'left','middle','#bbf7d0');
+    // P and U readouts on their axes
+    tag('P='+P.toFixed(1),pax[0],pax[1]+3,'center','top','#86efac');
+    tag('U='+U.toFixed(3),vax[0]-6,vax[1],'right','middle','#86efac');
+  }
+  // ---- axis ticks + titles ----
+  ctx.fillStyle='#8fa1c4';ctx.font='9px system-ui';
+  ctx.textAlign='center';ctx.textBaseline='top';
+  niceTicks(px0,px1,6).forEach(t=>{const s=proj(t,qy0,vlo);ctx.fillText(fmt(t),s[0],s[1]+3);});
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  niceTicks(qy0,qy1,6).forEach(t=>{const s=proj(px1,t,vlo);ctx.fillText(fmt(t),s[0]+3,s[1]);});
+  ctx.textAlign='right';
+  niceTicks(vlo,vhi,6).forEach(t=>{const s=proj(px0,qy0,t);ctx.fillText(t.toFixed(2),s[0]-4,s[1]);});
+  ctx.fillStyle='#aab8d8';ctx.font='10px system-ui';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  const pMid=proj((px0+px1)/2,qy0,vlo);ctx.fillText('P [MW] → export',pMid[0],pMid[1]+22);
+  const qMid=proj(px1,(qy0+qy1)/2,vlo);ctx.fillText('Q [MVAr]',qMid[0]+26,qMid[1]+14);
+  // ---- colorbar ----
+  const bx=w-24,by0=Math.max(46,cy-R*0.5),by1=Math.min(h-40,cy+R*0.5),bw=12,seg=(by1-by0)/60;
+  for(let i=0;i<60;i++){const f=i/59;ctx.fillStyle=viridis(f,1);ctx.fillRect(bx,by1-seg*(i+1),bw,seg+0.6);}
+  ctx.strokeStyle='rgba(160,180,210,.5)';ctx.lineWidth=1;ctx.strokeRect(bx,by0,bw,by1-by0);
+  ctx.fillStyle='#8fa1c4';ctx.font='9px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillText(vhi.toFixed(2),bx+bw+3,by0);
+  ctx.fillText('1.00',bx+bw+3,(by0+by1)/2);
+  ctx.fillText(vlo.toFixed(2),bx+bw+3,by1);
+  ctx.save();ctx.translate(bx+bw+24,(by0+by1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';
+  ctx.fillText('Grid voltage [p.u.]',0,0);ctx.restore();
+  // ---- title ----
+  ctx.fillStyle='#cbd5e1';ctx.font='700 12px system-ui';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillText('SC-18  P-Q-V Capability Volume',12,18);
+  const pl=DATA.plant||{};
+  ctx.fillStyle='#8fa1c4';ctx.font='10px system-ui';
+  ctx.fillText('S = '+num(pl.S_total_MVA)+' MVA · GCP '+num(pl.TX1_HV_kV,0)+' kV · V '+vlo.toFixed(2)+'–'+vhi.toFixed(2)+' p.u.',12,32);
+}
+function redraw3D(){ try{ draw3D(currentU(),currentP()); }catch(e){} }
+function bind3D(){
+  const cv=document.getElementById('pqv3dCanvas'); if(!cv||cv._b3d) return; cv._b3d=1;
+  cv.style.cursor='grab';
+  cv.addEventListener('mousedown',e=>{V3D.drag={x:e.clientX,y:e.clientY};cv.style.cursor='grabbing';e.preventDefault();});
+  window.addEventListener('mousemove',e=>{if(!V3D.drag)return;
+    V3D.azim+=(e.clientX-V3D.drag.x)*0.4;
+    V3D.elev=Math.max(-8,Math.min(86,V3D.elev+(e.clientY-V3D.drag.y)*0.4));
+    V3D.drag={x:e.clientX,y:e.clientY}; redraw3D();});
+  window.addEventListener('mouseup',()=>{if(V3D.drag){V3D.drag=null;cv.style.cursor='grab';}});
+  cv.addEventListener('wheel',e=>{e.preventDefault();
+    V3D.scale=Math.max(0.5,Math.min(3,V3D.scale*(e.deltaY<0?1.08:0.926))); redraw3D();},{passive:false});
+  const rb=document.getElementById('btn3dReset');
+  if(rb) rb.onclick=()=>{V3D.elev=22;V3D.azim=-58;V3D.scale=1;redraw3D();};
+}
+
+/* ═══════════════ READOUT + TABLE ═══════════════ */
+function renderReadout(U,P){
+  const base=qSpanAtUP(U,P);
+  const span=(SVG_ON&&base)?qSpanEff(U,P):base;
+  const nose=pNoseAtU(U);
+  const el=document.getElementById('readout');
+  const feasP = P<=nose+1e-6;
+  const cells=[];
+  cells.push(stat('Measured U',U.toFixed(3),'p.u.'));
+  cells.push(stat('Injected P',P.toFixed(2),'MW',!feasP,feasP?'':'> P_nose'));
+  if(span){
+    cells.push(stat('Q allowable'+(SVG_ON?' (+SVG)':''),
+                    span[0].toFixed(2)+' … '+span[1].toFixed(2),'MVAr'));
+    const pfLo=pf(P,span[0]),pfHi=pf(P,span[1]);
+    cells.push(stat('PF range',pfHi.txt+' / '+pfLo.txt,'cap / ind'));
+  }else{
+    cells.push(stat('Q allowable','—','infeasible',true,'no converged point'));
+    cells.push(stat('PF range','—',''));
+  }
+  el.innerHTML=cells.join('');
+}
+function stat(lab,num,u,warn,sub){
+  return `<div class="stat${warn?' warn':''}"><div class="lab">${lab}</div>
+    <div class="num">${num} <span class="u">${u||''}</span></div>
+    ${sub?`<div class="u" style="color:#fbbf24">${sub}</div>`:''}</div>`;
+}
+
+let LAST_ROWS=[];
+function renderTable(U,P){
+  const den=DATA.plant.P_max_PGC_MW;
+  const spanP=qSpanAtUP(U,P);
+  const gu=greenAtU(U);
+  const _pfl=pfLimit();
+  const tan=Math.tan(Math.acos(_pfl));
+  const _pfLbl=_pfl.toFixed(2).replace(/0$/,'');   // 0.90 -> "0.9"
+  const rows=[];
+  const feas=(p,q)=>{const s=(SVG_ON?qSpanEff(U,p):qSpanAtUP(U,p));
+     return s?(q>=s[0]-0.02&&q<=s[1]+0.02):false;};
+  const row=(name,p,q,note)=>{const P0=pf(p,q);return {name,p,q,pf:P0.txt,tag:P0.tag,
+     ok:feas(p,q),note:note||''};};
+  const spanEff=SVG_ON?qSpanEff(U,P):spanP;
+
+  rows.push({grp:`At your injected P = ${P.toFixed(2)} MW`});
+  if(spanP){
+    rows.push(row('Max capacitive (Q_max)',P,spanP[1]));
+    rows.push(row('Unity PF (Q = 0)',P,0));
+    rows.push(row('Max inductive (Q_min)',P,spanP[0]));
+    if(SVG_ON&&hasSVG()&&spanEff){
+      rows.push(row('Max capacitive + SVG',P,spanEff[1],'SVG cap active'));
+      rows.push(row('Max inductive + SVG',P,spanEff[0],'SVG ind active'));
+    }
+    const ceil=(SVG_ON&&spanEff)?spanEff[1]:spanP[1], floor=(SVG_ON&&spanEff)?spanEff[0]:spanP[0];
+    rows.push(row('PF = '+_pfLbl+' capacitive',P,+tan*P,(+tan*P<=ceil+0.02)?'':'outside envelope'));
+    rows.push(row('PF = '+_pfLbl+' inductive',P,-tan*P,(-tan*P>=floor-0.02)?'':'outside envelope'));
+  }
+  if(den){
+    rows.push({grp:`At rated P = P_max = ${den.toFixed(2)} MW (contractual)`});
+    if(gu){
+      rows.push(row('Q_max @ P_max',gu.P_at_qmax_MW||den,gu.Q_max_MVAr));
+      rows.push(row('Q_min @ P_max',gu.P_at_qmin_MW||den,gu.Q_min_MVAr));
+      if(SVG_ON&&hasSVG()){
+        const e=svgExtAtU(U);
+        rows.push(row('Q_max + SVG @ P_max',gu.P_at_qmax_MW||den,gu.Q_max_MVAr+e.dcap,'SVG cap'));
+        rows.push(row('Q_min + SVG @ P_max',gu.P_at_qmin_MW||den,gu.Q_min_MVAr-e.dind,'SVG ind'));
+      }
+    }
+  }
+  LAST_ROWS=rows;
+  const thead=document.querySelector('#tpTable thead');
+  const tbody=document.querySelector('#tpTable tbody');
+  thead.innerHTML='<tr><th>Test point</th><th>P [MW]</th><th>Q [MVAr]</th>'
+                 +'<th>PF</th><th>Feasible</th><th>Note</th></tr>';
+  tbody.innerHTML=rows.map(r=>{
+    if(r.grp) return `<tr class="grp"><td colspan="6">${r.grp}</td></tr>`;
+    return `<tr><td>${r.name}</td><td>${r.p.toFixed(2)}</td>
+      <td>${r.q>=0?'+':''}${r.q.toFixed(2)}</td>
+      <td><span class="tag ${r.tag}">${r.pf}</span></td>
+      <td class="${r.ok?'yes':'no'}">${r.ok?'✔':'✗'}</td>
+      <td style="color:#93a4c7;font-size:11.5px">${r.note}</td></tr>`;
+  }).join('');
+}
+function copyTable(){
+  const lines=[['Test point','P_MW','Q_MVAr','PF','Feasible','Note'].join('\t')];
+  LAST_ROWS.forEach(r=>{ if(r.grp){lines.push('# '+r.grp);return;}
+    lines.push([r.name,r.p.toFixed(2),(r.q>=0?'+':'')+r.q.toFixed(2),r.pf,
+                r.ok?'yes':'no',r.note].join('\t'));});
+  navigator.clipboard.writeText(lines.join('\n')).then(
+    ()=>flash('Table copied to clipboard'),
+    ()=>flash('Copy failed — select manually'));
+}
+
+/* ═══════════════ LEFT PANEL (plant tabs) ═══════════════ */
+function kv(pairs){return '<div class="kv">'+pairs.map(([k,v])=>
+  `<div class="k">${k}</div><div class="v">${v}</div>`).join('')+'</div>';}
+function num(x,d){return (x==null||isNaN(x))?'—':(+x).toFixed(d==null?2:d);}
+function renderPlant(){
+  const p=DATA.plant, m=DATA.meta;
+  document.getElementById('projSub').textContent=
+     (m.project||'—')+(m.sample?'  ·  SAMPLE':'')+(m.generated&&m.generated!=='—'?'  ·  '+m.generated:'');
+  const onoff=v=>v?'<span class="pill on">ON</span>':'<span class="pill off">OFF</span>';
+  const _plants = (Array.isArray(DATA.plants) ? DATA.plants.slice() : [
+      {key:'pv',  name:'PV',  on:p.pv_on,  S_MVA:p.S_total_MVA, P_MW:p.P_total_MW, Qcap_MVAr:p.Q_cap_MVAr},
+      {key:'wind',name:'Wind',on:p.wind_on,S_MVA:p.S_wind_MVA,  P_MW:p.wind_MW,    Qcap_MVAr:null},
+      {key:'bess',name:'BESS',on:p.bess_on,S_MVA:p.S_bess_MVA,  P_MW:p.bess_MW,    Qcap_MVAr:null}
+    ]).filter(pl=>pl.on);
+  let _rh = '<div class="sec-title">Grid connection</div>'+kv([
+      ['P_max @ GCP (P_ATR)','<b>'+num(p.P_max_PGC_MW)+'</b> MW']]);
+  _plants.forEach(pl=>{
+    _rh += '<div class="sec-title">'+(pl.name||pl.key)+'</div>'+kv([
+      ['S',num(pl.S_MVA)+' MVA'],
+      ['P',num(pl.P_MW)+' MW'],
+      ['Q capability',(pl.Qcap_MVAr==null?'—':'±'+num(pl.Qcap_MVAr)+' MVAr')]]);
+  });
+  if(!_plants.length) _rh += '<div class="note">No plant is enabled.</div>';
+  document.getElementById('pane-rating').innerHTML=_rh;
+  document.getElementById('pane-grid').innerHTML=
+    '<div class="sec-title">Main transformer TX1</div>'+kv([
+      ['Rating',num(p.TX1_MVA)+' MVA'],
+      ['HV',num(p.TX1_HV_kV,0)+' kV'],['LV',num(p.TX1_LV_kV,0)+' kV']])+
+    '<div class="sec-title">Grid connection</div>'+kv([
+      ['Grid V (ref)',num(p.grid_v_pu,3)+' p.u.'],
+      ['HV V min',num(p.hv_v_min_pu,3)+' p.u.'],
+      ['HV V max',num(p.hv_v_max_pu,3)+' p.u.'],
+      ['Grid PF min',num(p.pf_grid_min,2)]]);
+  document.getElementById('pane-reactive').innerHTML=
+    '<div class="sec-title">Reactive / PF limits</div>'+kv([
+      ['Contractual PF','±'+num(pfLimit(),2)],
+      ['Q at PF'+pfLimit().toFixed(2).replace(/0$/,'')+' / MW',
+       '±'+num(Math.tan(Math.acos(pfLimit())),3)+' MVAr/MW'],
+      ..._plants.filter(pl=>pl.Qcap_MVAr!=null).map(pl=>
+        ['Q cap · '+(pl.name||pl.key),'±'+num(pl.Qcap_MVAr)+' MVAr']),
+      ['Q cap total (all)','±'+num(_plants.reduce((s,pl)=>s+(+pl.Qcap_MVAr||0),0))+' MVAr']])+
+    '<div class="note">The green envelope is the plant’s <b>converged</b> reactive range at '+
+    'P = P_max (from load flow), which is far tighter than the ±Q rating because little apparent-'+
+    'power headroom remains at full active power.</div>';
+  document.getElementById('pane-volt').innerHTML=
+    '<div class="sec-title">Voltage levels (envelope grid)</div>'+
+    kv(DATA.pqv_volume.levels.map(v=>{
+      const g=DATA.green_envelope.find(r=>Math.abs(r.U-v)<1e-6);
+      return ['U = '+v.toFixed(3)+' p.u.', g?(num(g.Q_min_MVAr)+' … '+num(g.Q_max_MVAr)+' MVAr'):'—'];
+    }))+'<div class="note">Q range shown is at P = P_max (green envelope). Use the P slider '+
+    'to see the full range at partial power.</div>';
+  document.getElementById('pane-about').innerHTML=
+    '<div class="sec-title">Data source</div><div class="note">'+
+    (m.note||'')+'<br><br>Green U-Q/Pmax envelope: <code>SC-21</code>. '+
+    'Blue P-Q-V volume: <code>SC-18</code>. Both from OLTC-regulated PyPSA load flow. '+
+    '<br><br>Generated: <b>'+(m.generated||'—')+'</b></div>'+
+    '<div class="sec-title">Sign convention</div><div class="note">Q_GCP negative = '+
+    '<b>inductive</b> (absorb), positive = <b>capacitive</b> (inject). Matches ANRE Fig 7C.</div>';
+}
+
+/* ═══════════════ SLIDERS / STATE ═══════════════ */
+function uFromSlider(t){const L=sortedLevels();return L[0]+t*(L[L.length-1]-L[0]);}
+function sliderFromU(u){const L=sortedLevels();return (u-L[0])/(L[L.length-1]-L[0]);}
+function currentU(){return uFromSlider(+document.getElementById('uSlider').value);}
+function currentP(){
+  const nose=Math.max(pNoseAtU(currentU()), DATA.plant.P_max_PGC_MW||0);
+  return +document.getElementById('pSlider').value*nose;
+}
+function refresh(){
+  const U=currentU();
+  const nose=Math.max(pNoseAtU(U), DATA.plant.P_max_PGC_MW||0);
+  const P=+document.getElementById('pSlider').value*nose;
+  document.getElementById('uVal').textContent=U.toFixed(3);
+  document.getElementById('pVal').textContent=P.toFixed(2);
+  document.getElementById('pqU').textContent=U.toFixed(3);
+  document.getElementById('tblU').textContent=U.toFixed(3);
+  document.getElementById('pMaxT').textContent=nose.toFixed(1)+' MW';
+  markSnap(U);
+  drawPQ(U,P); drawUQ(U,P); renderReadout(U,P); renderTable(U,P);
+  bind3D(); draw3D(U,P);
+}
+function buildSnaps(){
+  const L=sortedLevels();
+  document.getElementById('uMinT').textContent=L[0].toFixed(3);
+  document.getElementById('uMaxT').textContent=L[L.length-1].toFixed(3);
+  document.getElementById('uSnap').innerHTML=L.map(v=>
+    `<button data-u="${v}">${v.toFixed(3)}</button>`).join('');
+  document.querySelectorAll('#uSnap button').forEach(b=>b.onclick=()=>{
+    document.getElementById('uSlider').value=sliderFromU(+b.dataset.u);refresh();});
+  const pm=DATA.plant.P_max_PGC_MW;
+  const nose=Math.max(pNoseAtU(currentU()),pm||0);
+  const psnaps=[{lab:'0',t:0},{lab:'¼',t:.25},{lab:'½',t:.5},{lab:'¾',t:.75}];
+  if(pm) psnaps.push({lab:'P_max',t:Math.min(1,pm/nose)});
+  psnaps.push({lab:'P_nose',t:1});
+  document.getElementById('pSnap').innerHTML=psnaps.map(s=>
+    `<button data-p="${s.t}">${s.lab}</button>`).join('');
+  document.querySelectorAll('#pSnap button').forEach(b=>b.onclick=()=>{
+    document.getElementById('pSlider').value=Math.min(1,+b.dataset.p);refresh();});
+}
+function markSnap(U){
+  document.querySelectorAll('#uSnap button').forEach(b=>
+    b.classList.toggle('cur',Math.abs(+b.dataset.u-U)<1e-6));
+}
+function flash(msg){
+  const el=document.getElementById('banner');el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200);
+}
+function setBanner(msg){const el=document.getElementById('banner');
+  if(msg){el.textContent=msg;el.classList.add('show');}else el.classList.remove('show');}
+
+/* ═══════════════ DATA LOADING ═══════════════ */
+function applyData(d,srcMsg){
+  // minimal validation
+  if(!d||!d.pqv_volume||!d.green_envelope||!d.plant){throw new Error('missing sections');}
+  normalizeData(d);
+  if(!d.green_envelope.length) throw new Error('no converged UQ envelope rows');
+  DATA=d; buildSnaps(); renderPlant();
+  const bar=document.getElementById('svgbar');
+  if(hasSVG()){
+    bar.hidden=false;
+    document.getElementById('svgInfo').textContent=
+      `SVG rated  +${(+DATA.svg.Q_cap_MVAr).toFixed(2)} / −${(+DATA.svg.Q_ind_MVAr).toFixed(2)} MVAr`
+      +'  —  magenta = extended reach';
+  }else{
+    bar.hidden=true; document.getElementById('svgToggle').checked=false; SVG_ON=false;
+  }
+  document.getElementById('pSlider').value=1;
+  const pm=DATA.plant.P_max_PGC_MW, U0=DATA.plant.grid_v_pu||1.0;
+  document.getElementById('uSlider').value=sliderFromU(Math.min(Math.max(U0,sortedLevels()[0]),sortedLevels().slice(-1)[0]));
+  refresh();
+  setBanner(DATA.meta&&DATA.meta.sample
+    ? '⚠ Showing SAMPLE data (illustrative only). Load a real commissioning_pq_data.json for actual values.'
+    : (srcMsg||''));
+}
+function loadFile(file){
+  const r=new FileReader();
+  r.onload=()=>{try{applyData(parseLoose(r.result),'Loaded: '+file.name);}
+    catch(e){flash('Could not load JSON: '+e.message);}};
+  r.readAsText(file);
+}
+async function tryAutoFetch(){
+  try{
+    const resp=await fetch('commissioning_pq_data.json',{cache:'no-store'});
+    if(resp.ok){applyData(parseLoose(await resp.text()),'Loaded commissioning_pq_data.json'); return true;}
+  }catch(e){/* file:// or missing — fall back to sample */}
+  return false;
+}
+
+/* ═══════════════ INIT ═══════════════ */
+document.getElementById('tabs').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-t]'); if(!b)return;
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tabpane').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('pane-'+b.dataset.t).classList.add('active');
+});
+document.getElementById('uSlider').addEventListener('input',refresh);
+document.getElementById('pSlider').addEventListener('input',refresh);
+document.getElementById('btnLoad').onclick=()=>document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);};
+document.getElementById('btnCopy').onclick=copyTable;
+document.getElementById('svgToggle').addEventListener('change',e=>{SVG_ON=e.target.checked;refresh();});
+window.addEventListener('resize',()=>refresh());
+document.getElementById('foot').innerHTML=
+  'Interpolation only — every capability value is a PyPSA OLTC load-flow result exported by '+
+  '<code>simulation_engine.py</code>. The tool intersects pre-computed convex-hull rings '+
+  '(blue P-Q-V volume) and the green U-Q/Pmax envelope; it runs no power flow itself. '+
+  'Open via the Simulation Hub (auto-loads the JSON) or use <b>Load results JSON…</b>.';
+
+applyData(SAMPLE_DATA);          // instant render
+tryAutoFetch();                  // upgrade to real data if served
+</script>
+</body>
+</html>
