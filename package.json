@@ -1,0 +1,28 @@
+{
+  "name": "pq-capability-3d-viewer",
+  "version": "1.0.0",
+  "description": "P-Q Capability 3D Viewer Tool - A visualization tool for electrical grid power capability analysis",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server . -p 8080 -o",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MirceaVoda/P-Q_Capability_3D_Viewer.git"
+  },
+  "keywords": [
+    "power-grid",
+    "visualization",
+    "3d-viewer",
+    "electrical-engineering"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/analytics": "^1.3.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
