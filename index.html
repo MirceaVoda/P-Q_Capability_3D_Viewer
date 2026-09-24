@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>P-Q Capability 3D Viewer Tool</title>
-<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 <style>
   :root{
     --bg:#0f172a; --panel:#111c34; --panel2:#16233f; --line:#26365c;
@@ -426,10 +425,45 @@ function svgExtAtU(U){
   return {dcap:interpMap(DATA.svg.dcap_by_level||{},U),
           dind:interpMap(DATA.svg.dind_by_level||{},U)};
 }
-/* effective Q span at (U,P) including SVG when enabled */
+/* SVG-relieved held P (cap / ind) — new JSON fields; null on older data */
+function svgHeldP(){
+  const s=DATA.svg||{};
+  return {pc:finite(s.P_held_svg_MW)?+s.P_held_svg_MW:null,
+          pi:finite(s.P_held_svg_ind_MW)?+s.P_held_svg_ind_MW:null};
+}
+/* SVG envelope Q (cap Q_max / ind Q_min) interpolated by U from green_cap/green_ind */
+function svgEnvAtU(U){
+  const pick=(arr,key)=>{
+    const a=(arr||[]).filter(r=>r&&finite(r[key])).slice().sort((x,y)=>x.U-y.U);
+    if(!a.length) return null;
+    if(U<=a[0].U) return a[0][key];
+    if(U>=a[a.length-1].U) return a[a.length-1][key];
+    for(let i=0;i<a.length-1;i++){if(U>=a[i].U&&U<=a[i+1].U){
+      const w=(U-a[i].U)/(a[i+1].U-a[i].U);return a[i][key]+(a[i+1][key]-a[i][key])*w;}}
+    return a[0][key];
+  };
+  return {Qc:pick(DATA.svg&&DATA.svg.green_cap,'Q_max_MVAr'),
+          Qi:pick(DATA.svg&&DATA.svg.green_ind,'Q_min_MVAr')};
+}
+function lerpC(a,b,t){t=Math.max(0,Math.min(1,t));return a+(b-a)*t;}
+/* effective Q span at (U,P) including SVG when enabled. In-region: base ±(dcap/dind).
+   Beyond the no-SVG nose the SVG lifts P: taper from the base nose to the SVG held-P
+   operating points (cap: P_held_svg,Q_cap ; ind: P_held_svg_ind,Q_ind). */
 function qSpanEff(U,P){
-  const s=qSpanAtUP(U,P); if(!s) return null;
-  const e=svgExtAtU(U); return [s[0]-e.dind, s[1]+e.dcap];
+  const e=svgExtAtU(U), base=qSpanAtUP(U,P);
+  if(base) return [base[0]-e.dind, base[1]+e.dcap];
+  if(!(SVG_ON&&hasSVG())) return null;
+  const hp=svgHeldP(); if(hp.pc==null&&hp.pi==null) return null;
+  const pn=pNoseAtU(U), near=qSpanAtUP(U,pn); if(!near) return null;
+  const env=svgEnvAtU(U);
+  const Pc=(hp.pc!=null)?hp.pc:pn, Pi=(hp.pi!=null)?hp.pi:pn;
+  const capHi=(env.Qc!=null)?env.Qc:near[1]+e.dcap;
+  const indLo=(env.Qi!=null)?env.Qi:near[0]-e.dind;
+  const Pmax=Math.max(Pc,Pi); if(P>Pmax+1e-9) return null;
+  const hi=(P<=Pc)?lerpC(near[1]+e.dcap,capHi,(P-pn)/Math.max(1e-9,Pc-pn)):capHi;
+  const lo=(P<=Pi)?lerpC(near[0]-e.dind,indLo,(P-pn)/Math.max(1e-9,Pi-pn))
+                  :lerpC(indLo,capHi,(P-Pi)/Math.max(1e-9,Pmax-Pi));
+  return [Math.min(lo,hi),Math.max(lo,hi)];
 }
 
 /* ═══════════════ CANVAS DRAWING ═══════════════ */
@@ -526,6 +560,17 @@ function drawPQ(U,P){
     ctx.beginPath();ctx.moveTo(X(Pmax),pad.t);ctx.lineTo(X(Pmax),h-pad.b);ctx.stroke();
     ctx.setLineDash([]);ctx.fillStyle='#fca5a5';ctx.font='10px system-ui';ctx.textAlign='left';
     ctx.fillText('P_max '+Pmax.toFixed(2),X(Pmax)+4,pad.t+10);
+  }
+  // SVG held-P marker(s) (magenta) — the P the SVG lifts the ceiling to
+  if(SVG_ON&&hasSVG()){
+    const hp=svgHeldP();
+    [[hp.pc,'SVG P_cap'],[hp.pi,'SVG P_ind']].forEach(([pp,lbl],i)=>{
+      if(!finite(pp)||pp<=Pmax*0+1e-9) return;
+      ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(192,132,252,.9)';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(X(pp),pad.t);ctx.lineTo(X(pp),h-pad.b);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#e9d5ff';ctx.font='10px system-ui';ctx.textAlign='left';
+      ctx.fillText(lbl+' '+pp.toFixed(2),X(pp)+4,pad.t+22+i*12);
+    });
   }
   // contractual-PF lines
   const tan=Math.tan(Math.acos(pfLimit()));
@@ -797,6 +842,28 @@ function draw3D(U,P){
     ctx.fillStyle='#fca5a5';ctx.font='10px system-ui';ctx.textAlign='left';ctx.textBaseline='alphabetic';
     ctx.fillText('P_ATR = '+PATR.toFixed(2)+' MW',tl[0]+4,tl[1]);
   }
+  // ---- SVG held-P cross-section curtain (magenta) — cap edge at P_held_svg,
+  //      ind edge at P_held_svg_ind (tilted, matches the engine Fig 20 curtain) ----
+  if(SVG_ON&&hasSVG()){
+    const hp=svgHeldP();
+    if(finite(hp.pc)||finite(hp.pi)){
+      const Pc=finite(hp.pc)?hp.pc:hp.pi, Pi=finite(hp.pi)?hp.pi:hp.pc;
+      const clo=[],chi=[];
+      L.forEach(v=>{const env=svgEnvAtU(v);
+        if(env.Qi!=null&&finite(Pi)) clo.push([Pi,env.Qi,v]);
+        if(env.Qc!=null&&finite(Pc)) chi.push([Pc,env.Qc,v]);});
+      if(clo.length>=2&&chi.length>=2){
+        ctx.beginPath();
+        clo.forEach((c,i)=>{const s=proj(c[0],c[1],c[2]);i?ctx.lineTo(s[0],s[1]):ctx.moveTo(s[0],s[1]);});
+        for(let i=chi.length-1;i>=0;i--){const s=proj(chi[i][0],chi[i][1],chi[i][2]);ctx.lineTo(s[0],s[1]);}
+        ctx.closePath();ctx.fillStyle='rgba(192,132,252,.15)';ctx.fill();
+        ctx.strokeStyle='rgba(192,132,252,.9)';ctx.lineWidth=1.2;ctx.stroke();
+        const tl2=proj(Pc,qy1,vhi);
+        ctx.fillStyle='#e9d5ff';ctx.font='10px system-ui';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+        ctx.fillText('SVG P '+Pc.toFixed(2)+' MW',tl2[0]+4,tl2[1]+11);
+      }
+    }
+  }
   // ---- current-U feasible slice (white highlight) ----
   const nose=pNoseAtU(U),NN=60,upr=[],dnr=[];
   for(let i=0;i<=NN;i++){const p=nose*i/NN,sp=qSpanAtUP(U,p);if(sp){upr.push([p,sp[1]]);dnr.push([p,sp[0]]);}}
@@ -955,9 +1022,13 @@ function renderTable(U,P){
       rows.push(row('Q_max @ P_max',gu.P_at_qmax_MW||den,gu.Q_max_MVAr));
       rows.push(row('Q_min @ P_max',gu.P_at_qmin_MW||den,gu.Q_min_MVAr));
       if(SVG_ON&&hasSVG()){
-        const e=svgExtAtU(U);
-        rows.push(row('Q_max + SVG @ P_max',gu.P_at_qmax_MW||den,gu.Q_max_MVAr+e.dcap,'SVG cap'));
-        rows.push(row('Q_min + SVG @ P_max',gu.P_at_qmin_MW||den,gu.Q_min_MVAr-e.dind,'SVG ind'));
+        const e=svgExtAtU(U), hp=svgHeldP(), env=svgEnvAtU(U);
+        const Pc=finite(hp.pc)?hp.pc:(gu.P_at_qmax_MW||den);
+        const Pi=finite(hp.pi)?hp.pi:(gu.P_at_qmin_MW||den);
+        const Qc=(env.Qc!=null)?env.Qc:gu.Q_max_MVAr+e.dcap;
+        const Qi=(env.Qi!=null)?env.Qi:gu.Q_min_MVAr-e.dind;
+        rows.push(row('Q_max + SVG @ P_svg',Pc,Qc,'SVG cap @ '+Pc.toFixed(1)+' MW'));
+        rows.push(row('Q_min + SVG @ P_svg',Pi,Qi,'SVG ind @ '+Pi.toFixed(1)+' MW'));
       }
     }
   }
