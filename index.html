@@ -78,6 +78,7 @@
   .stat.warn{border-color:#7a4a12;background:#241a08}
   .stat.warn .num{color:#fbbf24}
 
+  .svgbar[hidden]{display:none !important}
   .svgbar{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:9px 12px;
      background:#1b1233;border:1px solid #4a2e7a;border-radius:12px}
   .switch{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#e9d5ff}
@@ -1269,6 +1270,7 @@ function applyData(d,srcMsg){
       +'  —  magenta = extended reach';
   }else{
     bar.hidden=true; document.getElementById('svgToggle').checked=false; SVG_ON=false;
+    document.getElementById('svgInfo').textContent='';   // no stale rating from earlier data
   }
   document.getElementById('pSlider').value=1;
   const pm=DATA.plant.P_max_PGC_MW, U0=DATA.plant.grid_v_pu||1.0;
