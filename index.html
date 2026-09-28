@@ -323,7 +323,56 @@ function normalizeData(d){
     if(pv[k]) for(const key in pv[k])
       pv[k][key]=(pv[k][key]||[]).filter(pt=>Array.isArray(pt)&&finite(pt[0])&&finite(pt[1]));
   });
+  refineHulls(d);
   return d;
+}
+/* Convex hull ring (monotone chain) of [P,Q] points. */
+function convexRing(pts){
+  const p=pts.map(a=>[+a[0],+a[1]]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  if(p.length<3) return p;
+  const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[],up=[];
+  for(const q of p){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q);}
+  for(let i=p.length-1;i>=0;i--){const q=p[i];
+    while(up.length>=2&&cr(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q);}
+  up.pop();lo.pop();return lo.concat(up);
+}
+/* SC-18 samples each voltage level on a coarse P-Q grid (~5 MW P steps), so its
+   hull edges cut inside the true boundary (e.g. at P_Held). Each level's ring is
+   widened with exact LF-verified boundary points: the held-P U-Q envelope points
+   of that level (green_envelope: P_at_qmax/Q_max, P_at_qmin/Q_min) and, at the
+   nominal grid voltage, the dense SC-22 / SC-2 boundary ring (pq_nominal, newer
+   JSON only). Refined ring = convex hull of the union; pv.refined lists sources. */
+function refineHulls(d){
+  const pv=d.pqv_volume; if(!pv||!pv.hull_by_level) return;
+  const nom=(d.pq_nominal&&Array.isArray(d.pq_nominal.ring)&&finite(d.pq_nominal.U))?d.pq_nominal:null;
+  pv.refined={};
+  for(const key in pv.hull_by_level){
+    const U=+key, base=pv.hull_by_level[key]||[];
+    if(base.length<3||!isFinite(U)) continue;
+    const add=[], src=[];
+    (d.green_envelope||[]).forEach(r=>{
+      if(!r||Math.abs(r.U-U)>5e-4) return;
+      if(finite(r.P_at_qmax_MW)&&finite(r.Q_max_MVAr)) add.push([r.P_at_qmax_MW,r.Q_max_MVAr]);
+      if(finite(r.P_at_qmin_MW)&&finite(r.Q_min_MVAr)) add.push([r.P_at_qmin_MW,r.Q_min_MVAr]);
+    });
+    if(add.length) src.push('held-P points');
+    if(nom&&Math.abs(nom.U-U)<=5e-4){
+      const n0=add.length;
+      nom.ring.forEach(p=>{if(Array.isArray(p)&&finite(p[0])&&finite(p[1]))add.push(p);});
+      if(add.length>n0) src.push(nom.source?('boundary '+nom.source):'nominal-U boundary');
+    }
+    if(!add.length) continue;
+    pv.hull_by_level[key]=convexRing(base.concat(add));
+    pv.refined[key]=src;
+  }
+}
+function refinedNote(){
+  const r=(DATA&&DATA.pqv_volume&&DATA.pqv_volume.refined)||{}, ks=Object.keys(r);
+  if(!ks.length) return '';
+  const nomK=ks.filter(k=>r[k].some(s=>s.indexOf('boundary')===0));
+  return ' · P-Q slices refined with held-P points'
+    +(nomK.length?' + SC-22/SC-2 boundary at U = '+nomK.join(', ')+' p.u.':'');
 }
 
 /* ---------- geometry helpers on hull rings ---------- */
@@ -1281,7 +1330,7 @@ function applyData(d,srcMsg){
    setBanner(m.sample
      ? '⚠ Showing SAMPLE data (illustrative only). Load a real commissioning_pq_data.json for actual values.'
      : ((srcMsg?srcMsg:'Built-in data (not loaded from a run)')+' — Data: '+src
-        +(hasSVG()?'':' · no SVG in this data')));}
+        +(hasSVG()?'':' · no SVG in this data')+refinedNote()));}
 }
 function loadFile(file){
   const r=new FileReader();
