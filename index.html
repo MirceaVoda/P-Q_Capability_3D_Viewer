@@ -409,7 +409,10 @@ function pfLimit(){return (DATA.plant&&finite(DATA.plant.pf_limit))?DATA.plant.p
 
 /* ---------- SVG (Static Var Generator) reactive-support helpers ---------- */
 let SVG_ON=false;
-function hasSVG(){return !!(DATA.svg && DATA.svg.active);}
+function hasSVG(){const s=DATA.svg; if(!(s&&s.active)) return false;
+  // a zero / missing rating on both edges means the study found no SVG
+  const qc=Math.abs(+s.Q_cap_MVAr), qi=Math.abs(+s.Q_ind_MVAr);
+  return (finite(qc)&&qc>1e-6)||(finite(qi)&&qi>1e-6);}
 function interpMap(map,U){
   const keys=Object.keys(map).map(Number).sort((a,b)=>a-b);
   if(!keys.length) return 0;
@@ -1271,9 +1274,12 @@ function applyData(d,srcMsg){
   const pm=DATA.plant.P_max_PGC_MW, U0=DATA.plant.grid_v_pu||1.0;
   document.getElementById('uSlider').value=sliderFromU(Math.min(Math.max(U0,sortedLevels()[0]),sortedLevels().slice(-1)[0]));
   refresh();
-  setBanner(DATA.meta&&DATA.meta.sample
-    ? '⚠ Showing SAMPLE data (illustrative only). Load a real commissioning_pq_data.json for actual values.'
-    : (srcMsg||''));
+  {const m=DATA.meta||{};
+   const src=(m.project?m.project:'unnamed project')+(m.generated?' · generated '+m.generated:'');
+   setBanner(m.sample
+     ? '⚠ Showing SAMPLE data (illustrative only). Load a real commissioning_pq_data.json for actual values.'
+     : ((srcMsg?srcMsg:'Built-in data (not loaded from a run)')+' — Data: '+src
+        +(hasSVG()?'':' · no SVG in this data')));}
 }
 function loadFile(file){
   const r=new FileReader();
