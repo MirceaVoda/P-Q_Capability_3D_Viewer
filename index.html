@@ -961,13 +961,17 @@ function draw3D(U,P){
   // ---- SVG held-P cross-section curtain (magenta) — cap edge at P_held_svg,
   //      ind edge at P_held_svg_ind (tilted, matches the engine Fig 20 curtain) ----
   if(SVG_ON&&hasSVG()){
-    const hp=svgHeldP();
+    const hp=svgHeldP(), rt=svgRated();
     if(finite(hp.pc)||finite(hp.pi)){
       const Pc=finite(hp.pc)?hp.pc:hp.pi, Pi=finite(hp.pi)?hp.pi:hp.pc;
       const clo=[],chi=[];
+      // an unrated side (0 MVAr, no SVG envelope) closes on the no-SVG limit of that U
+      // at the same P — the SVG gives 0 MVAr there, the plant keeps its own reach
       L.forEach(v=>{const env=svgEnvAtU(v);
-        if(env.Qi!=null&&finite(Pi)) clo.push([Pi,env.Qi,v]);
-        if(env.Qc!=null&&finite(Pc)) chi.push([Pc,env.Qc,v]);});
+        const qi=(rt.ind&&env.Qi!=null)?env.Qi:(ringQSpanAtP(hullOf(v)||[],Pi)||[])[0];
+        const qc=(rt.cap&&env.Qc!=null)?env.Qc:(ringQSpanAtP(hullOf(v)||[],Pc)||[])[1];
+        if(finite(qi)&&finite(Pi)) clo.push([Pi,qi,v]);
+        if(finite(qc)&&finite(Pc)) chi.push([Pc,qc,v]);});
       if(clo.length>=2&&chi.length>=2){
         ctx.beginPath();
         clo.forEach((c,i)=>{const s=proj(c[0],c[1],c[2]);i?ctx.lineTo(s[0],s[1]):ctx.moveTo(s[0],s[1]);});
