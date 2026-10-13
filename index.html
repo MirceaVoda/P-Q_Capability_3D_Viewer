@@ -488,10 +488,22 @@ function svgExtAtU(U){
 /* SVG held P per edge = P_max,SVG(cap) / P_max,SVG(ind) (full rated ±Q). JSON keys
    P_held_svg_MW / P_held_svg_ind_MW, aliases P_max_SVG_cap_MW / _ind_MW; null on older data */
 function svgHeldP(){
-  const s=DATA.svg||{};
+  const s=DATA.svg||{}, rt=svgRated();
   const g=(a,b)=>finite(s[a])?+s[a]:(finite(s[b])?+s[b]:null);
-  return {pc:g('P_held_svg_MW','P_max_SVG_cap_MW'),
-          pi:g('P_held_svg_ind_MW','P_max_SVG_ind_MW')};
+  // an unrated side (0 MVAr) has no SVG held P — hidden everywhere it is used
+  return {pc:rt.cap?g('P_held_svg_MW','P_max_SVG_cap_MW'):null,
+          pi:rt.ind?g('P_held_svg_ind_MW','P_max_SVG_ind_MW'):null};
+}
+/* which SVG sides are rated (> 0.005 MVAr) */
+function svgRated(){
+  const s=DATA.svg||{};
+  const r=k=>finite(+s[k])&&Math.abs(+s[k])>=0.005;
+  return {cap:r('Q_cap_MVAr'), ind:r('Q_ind_MVAr')};
+}
+/* '+8.08 / 0' rating text — an unrated side is written 0 (no '−0.00') */
+function svgPairTxt(){
+  const s=DATA.svg||{}, rt=svgRated();
+  return (rt.cap?'+'+(+s.Q_cap_MVAr).toFixed(2):'0')+' / '+(rt.ind?'−'+Math.abs(+s.Q_ind_MVAr).toFixed(2):'0');
 }
 /* Engine P levels: P_ATR (contract), P_Held (no-SVG held export, only when the network
    limits), P_plant,max (P_ATR not reachable, plant rating). plant.P_Held_MW /
@@ -1119,8 +1131,9 @@ function renderTable(U,P){
     rows.push(row('Unity PF (Q = 0)',P,0));
     rows.push(row('Max inductive (Q_min)',P,spanP[0]));
     if(SVG_ON&&hasSVG()&&spanEff){
-      rows.push(row('Max capacitive + SVG',P,spanEff[1],'SVG cap active'));
-      rows.push(row('Max inductive + SVG',P,spanEff[0],'SVG ind active'));
+      const rt=svgRated();                         // only the rated SVG side(s)
+      if(rt.cap) rows.push(row('Max capacitive + SVG',P,spanEff[1],'SVG cap active'));
+      if(rt.ind) rows.push(row('Max inductive + SVG',P,spanEff[0],'SVG ind active'));
     }
     const ceil=(SVG_ON&&spanEff)?spanEff[1]:spanP[1], floor=(SVG_ON&&spanEff)?spanEff[0]:spanP[0];
     rows.push(row('PF = '+_pfLbl+' capacitive',P,+tan*P,(+tan*P<=ceil+0.02)?'':'outside envelope'));
@@ -1140,9 +1153,10 @@ function renderTable(U,P){
         const Qc=(env.Qc!=null)?env.Qc:Math.max(gu.Q_max_MVAr,gu.Q_max_MVAr+e.dcap);
         const Qi=(env.Qi!=null)?env.Qi:Math.min(gu.Q_min_MVAr,gu.Q_min_MVAr-e.dind);
         const _dP=p=>finite(_href.p)?', ΔP '+sgn(p-_href.p)+' MW':'';
-        rows.push(row('Q_max + SVG @ P_max,SVG(cap)',Pc,Qc,
+        const rt=svgRated();                       // only the rated SVG side(s)
+        if(rt.cap) rows.push(row('Q_max + SVG @ P_max,SVG(cap)',Pc,Qc,
           'held P with SVG '+Pc.toFixed(2)+' MW'+_dP(Pc)+' · ΔQ '+sgn(e.dcap)+' MVAr'));
-        rows.push(row('Q_min + SVG @ P_max,SVG(ind)',Pi,Qi,
+        if(rt.ind) rows.push(row('Q_min + SVG @ P_max,SVG(ind)',Pi,Qi,
           'held P with SVG '+Pi.toFixed(2)+' MW'+_dP(Pi)+' · ΔQ '+sgn(-e.dind)+' MVAr'));
       }
     }
@@ -1192,8 +1206,17 @@ function renderPlant(){
         else if(L.plant) o.push(['P_plant,max (P_ATR not reachable)',num(L.PM)+' MW']);
         else if(L.A!=null&&L.H!=null) o.push(['P_Held','= P_ATR']);
         if(hasSVG()&&(hp.pc!=null||hp.pi!=null)){
-          o.push(['P_max,SVG(cap)',num(hp.pc)+' MW']);
-          o.push(['P_max,SVG(ind)',num(hp.pi)+' MW']);}
+          if(hp.pc!=null) o.push(['P_max,SVG(cap)',num(hp.pc)+' MW']);
+          if(hp.pi!=null) o.push(['P_max,SVG(ind)',num(hp.pi)+' MW']);}
+        // SC-25 sizing point and what PF 0.90 at P_ATR would need (newer JSON only)
+        const s=DATA.svg||{};
+        if(hasSVG()&&finite(s.P_size_MW))
+          o.push(['SVG sized at '+(s.P_size_basis||'P_size'),num(s.P_size_MW)+' MW']);
+        if(hasSVG()&&finite(s.TX_MVA_req_PATR))
+          o.push(['PF 0.90 at '+num(finite(s.TX_req_PATR_P_MW)?s.TX_req_PATR_P_MW:p.P_max_PGC_MW)+' MW needs',
+                  (s.TX_req_PATR_TX||'TX1')+' ≈ '+(+s.TX_MVA_req_PATR).toFixed(1)+' MVA'
+                  +(finite(s.Q_SVG_req_PATR_MVAr)&&Math.abs(s.Q_SVG_req_PATR_MVAr)>0.005
+                    ?' + SVG '+sgn(+s.Q_SVG_req_PATR_MVAr)+' MVAr':'')]);
         return o;})()]);
   _plants.forEach(pl=>{
     _rh += '<div class="sec-title">'+(pl.name||pl.key)+'</div>'+kv([
@@ -1316,9 +1339,21 @@ function applyData(d,srcMsg){
   if(hasSVG()){
     bar.hidden=false;
     document.getElementById('svgInfo').textContent=
-      `SVG rated  +${(+DATA.svg.Q_cap_MVAr).toFixed(2)} / −${(+DATA.svg.Q_ind_MVAr).toFixed(2)} MVAr`
-      +(()=>{const hp=svgHeldP(); return (hp.pc!=null||hp.pi!=null)
-          ?'  ·  P_max,SVG cap '+num(hp.pc)+' / ind '+num(hp.pi)+' MW':'';})()
+      `SVG rated  ${svgPairTxt()} MVAr`
+      +(()=>{const hp=svgHeldP(), pr=[];          // rated sides only
+          if(hp.pc!=null) pr.push('cap '+num(hp.pc));
+          if(hp.pi!=null) pr.push('ind '+num(hp.pi));
+          return pr.length?'  ·  P_max,SVG '+pr.join(' / ')+' MW':'';})()
+      +(()=>{const s=DATA.svg||{};               // SC-25 sizing point / PF 0.90 at P_ATR
+          let t='';
+          if(s.P_size_basis==='P_PF09,max'&&finite(s.P_size_MW))
+            t+='  ·  PF 0.90 up to '+num(s.P_size_MW)+' MW';
+          if(finite(s.TX_MVA_req_PATR))
+            t+=' (at '+num(finite(s.TX_req_PATR_P_MW)?s.TX_req_PATR_P_MW:DATA.plant.P_max_PGC_MW)
+              +' MW: '+(s.TX_req_PATR_TX||'TX1')+' ≈ '+(+s.TX_MVA_req_PATR).toFixed(1)+' MVA'
+              +(finite(s.Q_SVG_req_PATR_MVAr)&&Math.abs(s.Q_SVG_req_PATR_MVAr)>0.005
+                ?' + SVG '+sgn(+s.Q_SVG_req_PATR_MVAr)+' MVAr':'')+')';
+          return t;})()
       +'  —  magenta = extended reach';
   }else{
     bar.hidden=true; document.getElementById('svgToggle').checked=false; SVG_ON=false;
