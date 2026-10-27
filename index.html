@@ -181,7 +181,7 @@
       <div class="card">
         <h3>U-Q capability envelope <span class="sub">(live at P = <span id="uqPval">—</span> MW; held-P envelope dashed)</span></h3>
         <div class="hint">Solid green = feasible Q range at your selected P (varies with the P slider);
-             dashed = envelope at the held export P (P_ATR; P_Held when the network limits; P_plant,max when P_ATR is not reachable). Horizontal line = your measured U.</div>
+             dashed = envelope at the held export P (P_ATR; P_Held when the network limits; P_Held,SVG with a fixed SVG; P_plant,max when P_ATR is not reachable). Horizontal line = your measured U.</div>
         <canvas id="uqCanvas" width="560" height="440"></canvas>
       </div>
     </div>
@@ -319,7 +319,7 @@ function normalizeData(d){
                  &&!(d.svg.green_ind&&d.svg.green_ind.length);
     const noExt=!Object.keys(d.svg.dcap_by_level).length
                &&!Object.keys(d.svg.dind_by_level).length;
-    if(noEdges&&noExt) d.svg.active=false;
+    if(noEdges&&noExt&&!d.svg.fixed) d.svg.active=false;   // a fixed SVG (no overlay edges) keeps its P levels
   }
   const pv=d.pqv_volume||{};
   ['points_by_level','hull_by_level'].forEach(k=>{
@@ -507,19 +507,28 @@ function svgPairTxt(){
 }
 /* Engine P levels: P_ATR (contract), P_Held (no-SVG held export, only when the network
    limits), P_plant,max (P_ATR not reachable, plant rating). plant.P_Held_MW /
-   plant.P_plant_max_MW are new; svg.P_held_MW is the older source; null on old JSON. */
+   plant.P_plant_max_MW are new; svg.P_held_MW is the older source; null on old JSON.
+   P_Held,SVG (plant.P_Held_SVG_MW, fixed SVG only): the held P of the green envelope,
+   which then carries the SVG on its Q edges = min(P_max,SVG cap, ind). */
 function pLevels(){
   const p=DATA.plant||{}, s=DATA.svg||{};
   const A=finite(p.P_max_PGC_MW)?+p.P_max_PGC_MW:null;
   const H=finite(p.P_Held_MW)?+p.P_Held_MW:(finite(s.P_held_MW)?+s.P_held_MW:null);
   const PM=finite(p.P_plant_max_MW)?+p.P_plant_max_MW:null;
+  const HS=finite(p.P_Held_SVG_MW)?+p.P_Held_SVG_MW:(finite(s.P_Held_SVG_MW)?+s.P_Held_SVG_MW:null);
   const clamped=(A!=null&&H!=null&&H<A-0.05);
+  const clampedS=(A!=null&&HS!=null&&HS<A-0.05);
   const plant=(!clamped&&A!=null&&PM!=null&&PM<A-0.05);
-  return {A,H,PM,clamped,plant};
+  return {A,H,PM,HS,clamped,clampedS,plant};
 }
 /* the P the dashed (held) green envelope sits at, with its label */
 function heldRef(){
   const L=pLevels();
+  if(L.HS!=null&&L.A!=null){                  // fixed SVG: green is held WITH the SVG
+    const ref=(L.H!=null?'; P_Held no SVG = '+L.H.toFixed(2)+' MW':'');
+    if(L.clampedS) return {p:L.HS, lbl:'P_Held,SVG', txt:'P_Held,SVG = '+L.HS.toFixed(2)+' MW (fixed SVG'+ref+')'};
+    return {p:L.A, lbl:'P_ATR', txt:'P_ATR = '+L.A.toFixed(2)+' MW (reached with the fixed SVG'+ref+')'};
+  }
   if(L.clamped) return {p:L.H, lbl:'P_Held', txt:'P_Held = '+L.H.toFixed(2)+' MW (no SVG, network-limited)'};
   if(L.plant)   return {p:L.PM, lbl:'P_plant,max', txt:'P_plant,max = '+L.PM.toFixed(2)+' MW — P_ATR not reachable (plant rating)'};
   if(L.A!=null) return {p:L.A, lbl:'P_ATR', txt:'P_ATR = '+L.A.toFixed(2)+' MW'};
@@ -667,7 +676,12 @@ function drawPQ(U,P){
     ctx.setLineDash([3,3]);ctx.strokeStyle='rgba(34,197,94,.85)';ctx.lineWidth=1.2;
     ctx.beginPath();ctx.moveTo(X(hp0),pad.t);ctx.lineTo(X(hp0),h-pad.b);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle='#bbf7d0';ctx.font='10px system-ui';ctx.textAlign='right';
-    ctx.fillText((L.clamped?'P_Held ':'P_plant,max ')+hp0.toFixed(2),X(hp0)-4,pad.t+10);}}
+    ctx.fillText((L.clamped?'P_Held ':'P_plant,max ')+hp0.toFixed(2),X(hp0)-4,pad.t+10);}
+   if(L.clampedS&&finite(L.HS)){             // fixed SVG: the green envelope's held P
+    ctx.setLineDash([6,3]);ctx.strokeStyle='rgba(34,197,94,.95)';ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.moveTo(X(L.HS),pad.t);ctx.lineTo(X(L.HS),h-pad.b);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#bbf7d0';ctx.font='10px system-ui';ctx.textAlign='right';
+    ctx.fillText('P_Held,SVG '+L.HS.toFixed(2),X(L.HS)-4,pad.t+22);}}
   // SVG held-P marker(s) (magenta) — the P the SVG lifts the ceiling to
   if(SVG_ON&&hasSVG()){
     const hp=svgHeldP();
@@ -1206,6 +1220,7 @@ function renderPlant(){
   let _rh = '<div class="sec-title">Grid connection</div>'+kv([
       ['P_ATR (contract, P_max @ GCP)','<b>'+num(p.P_max_PGC_MW)+'</b> MW'],
       ...(()=>{const L=pLevels(), hp=svgHeldP(), o=[];
+        if(L.HS!=null) o.push(['P_Held,SVG (fixed SVG — U-Q envelopes held here)',L.clampedS?num(L.HS)+' MW':'= P_ATR']);
         if(L.clamped) o.push(['P_Held (no SVG, network-limited)',num(L.H)+' MW']);
         else if(L.plant) o.push(['P_plant,max (P_ATR not reachable)',num(L.PM)+' MW']);
         else if(L.A!=null&&L.H!=null) o.push(['P_Held','= P_ATR']);
@@ -1311,6 +1326,7 @@ function buildSnaps(){
   if(pm) psnaps.push({lab:'P_ATR',t:Math.min(1,pm/nose)});
   {const L=pLevels(), hp=svgHeldP();
    if(L.clamped&&finite(L.H)) psnaps.push({lab:'P_Held',t:Math.min(1,L.H/nose)});
+   if(L.clampedS&&finite(L.HS)) psnaps.push({lab:'P_Held,SVG',t:Math.min(1,L.HS/nose)});
    if(L.plant&&finite(L.PM))  psnaps.push({lab:'P_plant,max',t:Math.min(1,L.PM/nose)});
    if(hasSVG()&&finite(hp.pc)) psnaps.push({lab:'P_max,SVG(cap)',t:Math.min(1,hp.pc/nose)});
    if(hasSVG()&&finite(hp.pi)&&!(finite(hp.pc)&&Math.abs(hp.pi-hp.pc)<1e-6))
@@ -1343,7 +1359,8 @@ function applyData(d,srcMsg){
   if(hasSVG()){
     bar.hidden=false;
     document.getElementById('svgInfo').textContent=
-      `SVG rated  ${svgPairTxt()} MVAr`
+      (DATA.svg&&DATA.svg.fixed?`fixed SVG  ${svgPairTxt()} MVAr (already inside the green / blue envelopes)`
+                               :`SVG rated  ${svgPairTxt()} MVAr`)
       +(()=>{const hp=svgHeldP(), pr=[];          // rated sides only
           if(hp.pc!=null) pr.push('cap '+num(hp.pc));
           if(hp.pi!=null) pr.push('ind '+num(hp.pi));
@@ -1358,7 +1375,7 @@ function applyData(d,srcMsg){
               +(finite(s.Q_SVG_req_PATR_MVAr)&&Math.abs(s.Q_SVG_req_PATR_MVAr)>0.005
                 ?' + SVG '+sgn(+s.Q_SVG_req_PATR_MVAr)+' MVAr':'')+')';
           return t;})()
-      +'  —  magenta = extended reach';
+      +(DATA.svg&&DATA.svg.fixed?'  —  magenta = P_max,SVG planes':'  —  magenta = extended reach');
   }else{
     bar.hidden=true; document.getElementById('svgToggle').checked=false; SVG_ON=false;
     document.getElementById('svgInfo').textContent='';   // no stale rating from earlier data
