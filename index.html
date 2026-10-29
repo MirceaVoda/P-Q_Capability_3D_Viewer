@@ -522,8 +522,21 @@ function pLevels(){
   return {A,H,PM,HS,clamped,clampedS,plant};
 }
 /* the P the dashed (held) green envelope sits at, with its label */
-function heldRef(){
+function heldRef(noSvg){
   const L=pLevels();
+  // SVG toggle on, auto-sized SVG (no fixed-SVG held P): the held P is the SVG one —
+  // P_max,SVG(cap/ind), the cos φ 0.90 crossing with the SVG; .ref = the no-SVG level.
+  // noSvg = true → always the no-SVG level (the green envelope's held P).
+  if(!noSvg&&SVG_ON&&hasSVG()&&L.HS==null){
+    const hp=svgHeldP(), ps=[hp.pc,hp.pi].filter(finite);
+    if(ps.length){
+      const p=Math.min(...ps), h0=heldRef(true);
+      const lbl=(ps.length>1?'P_max,SVG':(finite(hp.pc)?'P_max,SVG(cap)':'P_max,SVG(ind)'));
+      return {p, lbl, svg:true, ref:h0,
+              txt:lbl+' = '+p.toFixed(2)+' MW (with the SVG'
+                  +(finite(h0.p)?'; '+h0.lbl+' no SVG = '+h0.p.toFixed(2)+' MW':'')+')'};
+    }
+  }
   if(L.HS!=null&&L.A!=null){                  // fixed SVG: green is held WITH the SVG
     const ref=(L.H!=null?'; P_Held no SVG = '+L.H.toFixed(2)+' MW':'');
     if(L.clampedS) return {p:L.HS, lbl:'P_Held,SVG', txt:'P_Held,SVG = '+L.HS.toFixed(2)+' MW (fixed SVG'+ref+')'};
@@ -685,7 +698,7 @@ function drawPQ(U,P){
   // SVG held-P marker(s) (magenta) — the P the SVG lifts the ceiling to
   if(SVG_ON&&hasSVG()){
     const hp=svgHeldP();
-    const _hr=heldRef().p;
+    const _hr=heldRef(true).p;                // ΔP vs the no-SVG held P
     [[hp.pc,'P_max,SVG(cap)'],[hp.pi,'P_max,SVG(ind)']].forEach(([pp,lbl0],i)=>{
       if(!finite(pp)) return;
       const lbl=lbl0+(finite(_hr)?' (ΔP '+sgn(pp-_hr)+')':'');
@@ -828,7 +841,7 @@ function drawUQ(U,P){
 
   // label of the dashed (held-P) envelope
   if(g.length){ctx.fillStyle='#86efac';ctx.font='10px system-ui';ctx.textAlign='left';
-    ctx.fillText('dashed: '+heldRef().txt,pad.l+6,h-pad.b-8);}
+    ctx.fillText('dashed: '+heldRef(true).txt,pad.l+6,h-pad.b-8);}
 
   // contractual-PF & Q=0 verticals
   const tan=Math.tan(Math.acos(pfLimit()));
@@ -1105,7 +1118,8 @@ function renderReadout(U,P){
   if(_hvkV) cells.push(stat('U at GCP',(U*_hvkV).toFixed(1),'kV'));
   cells.push(stat('Injected P',P.toFixed(2),'MW',!feasP,
     feasP?(P>nose+1e-6?'SVG-lifted (> no-SVG P_nose)':''):('> P_nose'+(SVG_ON&&hasSVG()?' (+SVG)':''))));
-  {const hr=heldRef(); if(finite(hr.p)) cells.push(stat(hr.lbl,hr.p.toFixed(2),'MW'));}
+  {const hr=heldRef(); if(finite(hr.p)) cells.push(stat(hr.lbl,hr.p.toFixed(2),'MW',false,
+     (hr.svg&&hr.ref&&finite(hr.ref.p))?(hr.ref.lbl+' no SVG: '+hr.ref.p.toFixed(2)+' MW'):''));}
   if(span){
     cells.push(stat('Q allowable'+(SVG_ON?' (+SVG)':''),
                     span[0].toFixed(2)+' … '+span[1].toFixed(2),'MVAr'));
@@ -1158,7 +1172,7 @@ function renderTable(U,P){
     rows.push(row('PF = '+_pfLbl+' inductive',P,-tan*P,(-tan*P>=floor-0.02)?'':'outside envelope'));
   }
   if(den){
-    const _href=heldRef();
+    const _href=heldRef(true);                // the green (no-SVG) held envelope
     rows.push({grp:`At the held export: ${_href.txt}`+(_href.lbl!=='P_ATR'?`  (P_ATR = ${den.toFixed(2)} MW)`:'')});
     const _hp0=finite(_href.p)?_href.p:den;
     if(gu){
@@ -1241,7 +1255,8 @@ function renderPlant(){
     _rh += '<div class="sec-title">'+(pl.name||pl.key)+'</div>'+kv([
       ['S',num(pl.S_MVA)+' MVA'],
       ['P',num(pl.P_MW)+' MW'],
-      ['Q capability',(pl.Qcap_MVAr==null?'—':'±'+num(pl.Qcap_MVAr)+' MVAr')]]);
+      ['Q capability',(finite(pl.Q_fixed_MVAr)?'fixed '+sgn(+pl.Q_fixed_MVAr)+' MVAr (consumer — no Q range)'
+                       :(pl.Qcap_MVAr==null?'—':'±'+num(pl.Qcap_MVAr)+' MVAr'))]]);
   });
   if(!_plants.length) _rh += '<div class="note">No plant is enabled.</div>';
   document.getElementById('pane-rating').innerHTML=_rh;
@@ -1267,10 +1282,11 @@ function renderPlant(){
       ['Q at PF'+pfLimit().toFixed(2).replace(/0$/,'')+' / MW',
        '±'+num(Math.tan(Math.acos(pfLimit())),3)+' MVAr/MW'],
       ..._plants.filter(pl=>pl.Qcap_MVAr!=null).map(pl=>
-        ['Q cap · '+(pl.name||pl.key),'±'+num(pl.Qcap_MVAr)+' MVAr']),
+        ['Q cap · '+(pl.name||pl.key),finite(pl.Q_fixed_MVAr)
+          ?'fixed '+sgn(+pl.Q_fixed_MVAr)+' MVAr (consumer)':'±'+num(pl.Qcap_MVAr)+' MVAr']),
       ['Q cap total (all)','±'+num(_plants.reduce((s,pl)=>s+(+pl.Qcap_MVAr||0),0))+' MVAr']])+
     '<div class="note">The green envelope is the plant’s <b>converged</b> reactive range at '+
-    'the held export ('+heldRef().txt+', from load flow), which is far tighter than the ±Q rating because little apparent-'+
+    'the held export ('+heldRef(true).txt+', from load flow), which is far tighter than the ±Q rating because little apparent-'+
     'power headroom remains at full active power.</div>';
   document.getElementById('pane-volt').innerHTML=
     '<div class="sec-title">Voltage levels (envelope grid)</div>'+
@@ -1293,12 +1309,11 @@ function uFromSlider(t){const L=sortedLevels();return L[0]+t*(L[L.length-1]-L[0]
 function sliderFromU(u){const L=sortedLevels();return (u-L[0])/(L[L.length-1]-L[0]);}
 function currentU(){return uFromSlider(+document.getElementById('uSlider').value);}
 function currentP(){
-  const nose=Math.max(pNoseAtU(currentU()), DATA.plant.P_max_PGC_MW||0);
-  return +document.getElementById('pSlider').value*nose;
+  return +document.getElementById('pSlider').value*pScale(currentU());
 }
 function refresh(){
   const U=currentU();
-  const nose=Math.max(pNoseAtU(U), DATA.plant.P_max_PGC_MW||0);
+  const nose=pScale(U);
   const P=+document.getElementById('pSlider').value*nose;
   document.getElementById('uVal').textContent=U.toFixed(3);
   {const _hv=gcpKV();
@@ -1320,22 +1335,48 @@ function buildSnaps(){
     `<button data-u="${v}">${v.toFixed(3)}</button>`).join('');
   document.querySelectorAll('#uSnap button').forEach(b=>b.onclick=()=>{
     document.getElementById('uSlider').value=sliderFromU(+b.dataset.u);refresh();});
+  // P snaps: fractions of the slider, or engine levels in MW converted at CLICK time with
+  // the current U's slider scale; P_nose = the hull nose at that U, SVG-lifted with the
+  // SVG on (review 2026-10-29: was the slider end, max(nose, P_ATR))
   const pm=DATA.plant.P_max_PGC_MW;
-  const nose=Math.max(pNoseAtU(currentU()),pm||0);
   const psnaps=[{lab:'0',t:0},{lab:'¼',t:.25},{lab:'½',t:.5},{lab:'¾',t:.75}];
-  if(pm) psnaps.push({lab:'P_ATR',t:Math.min(1,pm/nose)});
+  if(pm) psnaps.push({lab:'P_ATR'});
   {const L=pLevels(), hp=svgHeldP();
-   if(L.clamped&&finite(L.H)) psnaps.push({lab:'P_Held',t:Math.min(1,L.H/nose)});
-   if(L.clampedS&&finite(L.HS)) psnaps.push({lab:'P_Held,SVG',t:Math.min(1,L.HS/nose)});
-   if(L.plant&&finite(L.PM))  psnaps.push({lab:'P_plant,max',t:Math.min(1,L.PM/nose)});
-   if(hasSVG()&&finite(hp.pc)) psnaps.push({lab:'P_max,SVG(cap)',t:Math.min(1,hp.pc/nose)});
+   if(L.clamped&&finite(L.H)) psnaps.push({lab:'P_Held'});
+   if(L.clampedS&&finite(L.HS)) psnaps.push({lab:'P_Held,SVG'});
+   if(L.plant&&finite(L.PM))  psnaps.push({lab:'P_plant,max'});
+   if(hasSVG()&&finite(hp.pc)) psnaps.push({lab:'P_max,SVG(cap)'});
    if(hasSVG()&&finite(hp.pi)&&!(finite(hp.pc)&&Math.abs(hp.pi-hp.pc)<1e-6))
-     psnaps.push({lab:'P_max,SVG(ind)',t:Math.min(1,hp.pi/nose)});}
-  psnaps.push({lab:'P_nose',t:1});
+     psnaps.push({lab:'P_max,SVG(ind)'});}
+  psnaps.push({lab:'P_nose'});
   document.getElementById('pSnap').innerHTML=psnaps.map(s=>
-    `<button data-p="${s.t}">${s.lab}</button>`).join('');
+    `<button ${s.t!=null?`data-p="${s.t}"`:`data-k="${s.lab}"`}>${s.lab}</button>`).join('');
   document.querySelectorAll('#pSnap button').forEach(b=>b.onclick=()=>{
-    document.getElementById('pSlider').value=Math.min(1,+b.dataset.p);refresh();});
+    let t=+b.dataset.p;
+    if(b.dataset.k){
+      const U=currentU(), P=pSnapMW(b.dataset.k,U);
+      if(!finite(P)) return;
+      t=P/pScale(U);
+    }
+    document.getElementById('pSlider').value=Math.min(1,Math.max(0,t));refresh();});
+}
+/* P [MW] of an engine-level P snap at U (P_nose: the hull nose there, SVG-lifted with the SVG on) */
+function pSnapMW(k,U){
+  const L=pLevels(), hp=svgHeldP();
+  return ({'P_ATR':L.A,'P_Held':L.H,'P_Held,SVG':L.HS,'P_plant,max':L.PM,
+           'P_max,SVG(cap)':hp.pc,'P_max,SVG(ind)':hp.pi,'P_nose':noseEffAtU(U)})[k];
+}
+/* hull nose at U; with the SVG on, at least the SVG held P (where the feasible region ends) */
+function noseEffAtU(U){
+  const n=pNoseAtU(U), hp=svgHeldP();
+  return (SVG_ON&&hasSVG())?Math.max(n,...[hp.pc,hp.pi].filter(finite)):n;
+}
+/* P-slider full scale at U: the nose, P_ATR or an SVG held P, whichever is largest
+   (independent of the SVG toggle, so toggling never moves the selected P) */
+function pScale(U){
+  const hp=svgHeldP();
+  return Math.max(pNoseAtU(U), DATA.plant.P_max_PGC_MW||0,
+                  ...(hasSVG()?[hp.pc,hp.pi].filter(finite):[]));
 }
 function markSnap(U){
   document.querySelectorAll('#uSnap button').forEach(b=>
